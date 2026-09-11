@@ -153,7 +153,6 @@ def get_github_repo():
     return None
 
 def create_initial_df():
-    # Poprawiony stan zero: start i koniec są równe wartościom bazowym, więc delta = 0.0
     return pd.DataFrame([
         {
             "id": 1,
@@ -192,13 +191,25 @@ def create_initial_df():
 def load_data():
     repo = get_github_repo()
     branch = st.secrets.get("github", {}).get("branch", "main")
+    df = None
     if repo:
         try:
             file_content = repo.get_contents(FILE_PATH, ref=branch)
-            return pd.read_csv(io.StringIO(file_content.decoded_content.decode('utf-8')))
+            df = pd.read_csv(io.StringIO(file_content.decoded_content.decode('utf-8')))
         except Exception:
-            return load_local_fallback()
-    return load_local_fallback()
+            df = load_local_fallback()
+    else:
+        df = load_local_fallback()
+    
+    # AUTOMATYCZNA KOREKTA: Zapewnienie, że stan zero ma zawsze units_start == units_end i delta == 0
+    if df is not None and not df.empty:
+        mask_zero = df["period_label"].str.contains("Stan Zero", na=False)
+        if mask_zero.any():
+            df.loc[mask_zero, "units_start"] = df.loc[mask_zero, "units_end"]
+            df.loc[mask_zero, "delta_units"] = 0.0
+            df.loc[mask_zero, "delta_gj"] = 0.0
+            
+    return df
 
 def load_local_fallback():
     if os.path.exists(FILE_PATH):
@@ -258,7 +269,7 @@ st.divider()
 # ---------------------------------------------------------
 # OBLICZENIA DLA BIEŻĄCEGO POKOJU
 # ---------------------------------------------------------
-df_room = df[df["room_name"] == current_room].sort_values(by=["date_entry", "id"])
+df_room = df[df["room_name"] == current_room].sort_values(by=["date_entry", "id"]) if not df.empty else pd.DataFrame()
 
 if not df_room.empty:
     last_row = df_room.iloc[-1]
@@ -269,8 +280,8 @@ if not df_room.empty:
     total_delta_room = df_room[df_room["season"] == "2026/2027 (Sonoff - Wtorki)"]["delta_units"].sum()
 else:
     last_meter = ROOMS_CONFIG[current_room]["meter_default"]
-    val_start = 0.0
-    val_end = 126.7 if current_room == "Sypialnia" else (110.4 if current_room == "Pokój Dziecka" else 0.0)
+    val_start = 110.4 if current_room == "Pokój Dziecka" else (126.7 if current_room == "Sypialnia" else 0.0)
+    val_end = val_start
     last_date = "Brak odczytów"
     total_delta_room = 0.0
 
@@ -311,7 +322,7 @@ st.markdown(f"""
 
 st.markdown(f"""
 <div class="ios-balance-plus">
-    <span style="font-size: 16px; font-weight: 800; color: #1E7E34;">🟢 STAN ZZERO ZAINSTALOWANY (Baza Wrzesień 2026)</span><br>
+    <span style="font-size: 16px; font-weight: 800; color: #1E7E34;">🟢 STAN ZERO ZAINSTALOWANY (Baza Wrzesień 2026)</span><br>
     <span style="font-size: 13px; color: #2C3E50;">
         Strefa <b>{current_room}</b> ma poprawnie zablokowany punkt wyjścia: <b>{val_end:.1f} U</b> (przyrost wynosi 0.0 U). Gotowe na wtorkowe pomiary!
     </span>
