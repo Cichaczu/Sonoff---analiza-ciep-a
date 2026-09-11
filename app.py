@@ -44,7 +44,7 @@ def get_outdoor_temp():
         res = requests.get(url, timeout=3)
         if res.status_code == 200:
             return float(res.json()['main']['temp'])
-    except Exception:
+    except requests.exceptions.RequestException:
         pass
     return 12.5
 
@@ -235,6 +235,8 @@ def create_initial_df():
         }
     ])
 
+# Cachowanie danych (TTL: 5 minut), aby nie blokować API Githuba przy odświeżeniach
+@st.cache_data(ttl=300, show_spinner=False)
 def load_data():
     repo = get_github_repo()
     branch = st.secrets.get("github", {}).get("branch", "main")
@@ -269,6 +271,8 @@ def save_data(df, commit_message="Aktualizacja odczytu"):
     repo = get_github_repo()
     branch = st.secrets.get("github", {}).get("branch", "main")
     csv_string = df.to_csv(index=False)
+    success = False
+    
     if repo:
         try:
             try:
@@ -277,11 +281,21 @@ def save_data(df, commit_message="Aktualizacja odczytu"):
             except GithubException as e:
                 if e.status == 404:
                     repo.create_file(FILE_PATH, commit_message, csv_string, branch=branch)
-            return True
-        except Exception: return False
-    os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
-    df.to_csv(FILE_PATH, index=False)
-    return True
+            success = True
+        except Exception:
+            success = False
+            
+    # Propagacja na plik lokalny w ramach fallbacku
+    if not success:
+        os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
+        df.to_csv(FILE_PATH, index=False)
+        success = True
+        
+    if success:
+        # Bardzo ważne: czyścimy cache pobierania, aby od razu widzieć nowy stan
+        st.cache_data.clear()
+        
+    return success
 
 def get_tuesday_for_iso_week(year, week):
     first_day = date(year, 1, 4)
@@ -412,8 +426,12 @@ if is_tuesday:
                     # Przyrost to wartość końcowa minus stały stan początkowy (lub delta względem poprzedniego odczytu)
                     prev_val_end = val_end if not df_room_sonoff.empty else val_start
                     delta_u_m = u_e - prev_val_end
+                    
+                    # Poprawka: Rejestrujemy ewentualną anomalię / spadek wartości
                     if delta_u_m < 0:
                         delta_u_m = 0.0
+                        modal_notes = f"{modal_notes} [Auto-korekta: wykryto ujemną deltę - spadek wartości]" if modal_notes else "[Auto-korekta: wykryto ujemną deltę]"
+                        
                     delta_g_m = gj_e_m - gj_s_m if gj_e_m > gj_s_m else 0.0
 
                     if u_e < prev_val_end:
@@ -576,8 +594,12 @@ with st.sidebar:
         if st.form_submit_button("⚡ Zapisz i Synchronizuj", use_container_width=True):
             prev_val_end = val_end if not df_room_sonoff.empty else val_start
             delta_u = u_end - prev_val_end
+            
+            # Poprawka: Rejestrujemy ewentualną anomalię / spadek wartości dla wpisów ręcznych
             if delta_u < 0:
                 delta_u = 0.0
+                notes = f"{notes} [Auto-korekta: wykryto ujemną deltę - spadek wartości]" if notes else "[Auto-korekta: wykryto ujemną deltę]"
+                
             delta_g = gj_e - gj_s if gj_e > gj_s else 0.0
 
             if u_end < prev_val_end:
