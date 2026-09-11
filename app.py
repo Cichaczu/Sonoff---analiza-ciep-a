@@ -23,14 +23,14 @@ FILE_PATH = "data/consumption.csv"
 EST_PLN_PER_UNIT = 2.45
 APARTMENT_AREA_M2 = 66.54  # Dokładna powierzchnia lokalu
 
-# Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m²
-SSM_CO_MONTHLY_ADVANCE = 774.53  # 11.64 zł / m² / mc (zaliczka miesięczna CO)
-SSM_TOTAL_MONTHLY_RENT = 1280.00 # Całkowity miesięczny czynsz do SSM (eksploatacja + woda + CO + fundusz)
-SSM_NON_HEATING_RENT = SSM_TOTAL_MONTHLY_RENT - SSM_CO_MONTHLY_ADVANCE # Opłaty stałe bez CO (~505.47 zł)
+# Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m² (Wrzesień 2026)
+SSM_CO_MONTHLY_ADVANCE = 774.53  # Zaliczka miesięczna CO (11.64 zł / m²)
+SSM_NON_HEATING_RENT = 1121.87   # Opłaty stałe (eksploatacja, woda itp.)
+SSM_TOTAL_MONTHLY_RENT = 1896.40 # Całkowity miesięczny czynsz do SSM
 
-SSM_SEASON_MONTHS = 7            # Sezon grzewczy (październik - kwiecień)
+SSM_SEASON_MONTHS = 7            # Sezon grzewczy (październik - kwiecień / wrzesień start)
 SSM_TOTAL_WEEKS = 30             # Przybliżona liczba tygodni w sezonie
-SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity budżet zaliczkowy CO na sezon (~5421.71 zł)
+SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity budżet zaliczkowy CO
 
 # Współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego
 LAT_LOCATION = 50.3264
@@ -38,7 +38,7 @@ LON_LOCATION = 19.0295
 LOCATION_NAME = "Siemianowice Śl. - Bytków (ZHP)"
 
 # ---------------------------------------------------------
-# POBIERANIE POGODY Z OPENWEATHERMAP
+# POBIERANIE POGODY I PROGNOZY Z OPENWEATHERMAP
 # ---------------------------------------------------------
 def get_outdoor_temp():
     api_key = st.secrets.get("openweathermap", {}).get("api_key", None)
@@ -52,6 +52,35 @@ def get_outdoor_temp():
     except requests.exceptions.RequestException:
         pass
     return 12.5
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def get_weather_forecast():
+    api_key = st.secrets.get("openweathermap", {}).get("api_key", None)
+    if not api_key:
+        return []
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/forecast?lat={LAT_LOCATION}&lon={LON_LOCATION}&appid={api_key}&units=metric"
+        res = requests.get(url, timeout=4)
+        if res.status_code == 200:
+            data = res.json()
+            forecasts = []
+            seen_dates = set()
+            for item in data.get('list', []):
+                dt_txt = item['dt_txt']
+                date_str = dt_txt.split(' ')[0]
+                # Bierzemy prognozy na godziny popołudniowe (np. 12:00 lub najbliższe) oraz grupujemy po dniach
+                if date_str not in seen_dates and "12:00:00" in dt_txt:
+                    seen_dates.add(date_str)
+                    forecasts.append({
+                        "date": date_str,
+                        "temp": item['main']['temp'],
+                        "desc": item['weather'][0]['description'],
+                        "icon": item['weather'][0]['icon']
+                    })
+            return forecasts[:7]
+    except Exception:
+        pass
+    return []
 
 # ---------------------------------------------------------
 # STYLIZACJA W STYLU iOS 18 (Czysty, nowoczesny UI)
@@ -581,7 +610,7 @@ with kpi_col3:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# SIDEBAR: FORMULARZ + SYMULATOR + ROI + BUFOR BEZPIECZEŃSTWA
+# SIDEBAR: FORMULARZ + SYMULATOR + PROGNOZA POGODY 7D + ROI
 # ---------------------------------------------------------
 with st.sidebar:
     st.header("📥 Nowy Odczyt (Ręczny)")
@@ -591,7 +620,7 @@ with st.sidebar:
     current_year, current_iso_w, _ = date.today().isocalendar()
     week_input = st.number_input("Tydzień Roku (1 - 52)", min_value=1, max_value=52, value=current_iso_w)
     
-    tuesday_date = get_tuesday_for_iso_week(2026, week_input)
+    tuesday_date = get_tuesday_for_iso_week(current_year, week_input)
     period_tag = f"Tydzień {week_input:02d} (Wtorek)"
 
     st.info(f"📆 Domyślny Wtorek: **{tuesday_date.strftime('%d.%m.%Y')}**")
@@ -662,6 +691,23 @@ with st.sidebar:
                     }
                     st.success("Zapisano i zsynchronizowano pomyślnie!")
                     st.rerun()
+
+    # NOWY MODUŁ: 7-DNIOWA PROGNOZA POGODY OPENWEATHERMAP I REKOMENDACJE SONOFF
+    st.markdown("---")
+    st.header("🌤️ Prognoza 7D (Bytków) & Sonoff AI")
+    forecast_list = get_weather_forecast()
+    
+    if forecast_list:
+        min_forecast_temp = min([f['temp'] for f in forecast_list])
+        if min_forecast_temp < 5.0:
+            st.warning(f"⚠️ **Ostrzeżenie o ochłodzeniu!** Prognozowana min. temperatura w Bytkowie spadnie do **{min_forecast_temp}°C**. Zalecane włączenie trybu komfortowego w harmonogramie Sonoff.")
+        else:
+            st.success("✅ Stabilne warunki pogodowe. Harmonogram ekologiczny Sonoff działa optymalnie.")
+
+        for f in forecast_list[:4]: # Pokazujemy najbliższe 4 dni w sidebarze
+            st.markdown(f"📅 **{f['date']}**: 🌡️ **{f['temp']:.1f}°C** | _{f['desc']}_")
+    else:
+        st.info("Brak aktywnego klucza API OpenWeatherMap lub brak danych prognozy.")
 
     # SYMULATOR OSZCZĘDNOŚCI
     st.markdown("---")
@@ -826,20 +872,52 @@ with tab_season_comp:
             st.plotly_chart(fig_cum, use_container_width=True)
 
         # ---------------------------------------------------------
-        # NOWY INTERAKTYWNY WYKRES: KOSZTY CO VS OPŁATY CAŁKOWITE (CZYNSZ SSM)
+        # NOWY WYKRES: KOSZT NARASTAJĄCY NA m² NA TLE STAWKI SSM
+        # ---------------------------------------------------------
+        st.markdown("---")
+        st.markdown("#### 📐 Narastający Koszt Ogrzewania na 1 m² Lokalu vs Średnia Stawka SSM")
+        st.caption(f"Porównanie faktycznego kosztu CO w przeliczeniu na 1 m² ({APARTMENT_AREA_M2} m²) względem limitu narastającego zaliczki spółdzielczej.")
+
+        df_m2_cum = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")].groupby("week_num")["delta_units"].sum().cumsum().reset_index()
+        df_m2_cum["cost_per_m2"] = (df_m2_cum["delta_units"] * EST_PLN_PER_UNIT) / APARTMENT_AREA_M2
+        
+        # Obliczenie narastającej stawki zaliczki SSM na m² dla dostępnych tygodni
+        weekly_ssm_advance_per_m2 = (SSM_CO_MONTHLY_ADVANCE / SSM_SEASON_MONTHS) / 4.28 # przybliżenie tygodniowe
+        df_m2_cum["ssm_limit_per_m2"] = df_m2_cum.index.map(lambda i: ( (i+1) / SSM_TOTAL_WEEKS ) * (SSM_ANNUAL_CO_BUDGET / APARTMENT_AREA_M2))
+
+        fig_m2_trend = px_go.Figure()
+        fig_m2_trend.add_trace(px_go.Scatter(
+            x=df_m2_cum["week_num"], y=df_m2_cum["cost_per_m2"],
+            name="Rzeczywisty Koszt Sonoff [zł / m²]", mode="lines+markers",
+            line=dict(color="#007AFF", width=3)
+        ))
+        fig_m2_trend.add_trace(px_go.Scatter(
+            x=df_m2_cum["week_num"], y=df_m2_cum["ssm_limit_per_m2"],
+            name="Limit Zaliczki SSM [zł / m²]", mode="lines",
+            line=dict(color="#34C759", width=2.5, dash="dash")
+        ))
+        fig_m2_trend.update_layout(
+            title="Narastający Koszt Ogrzewania [zł/m²] na tle Budżetu SSM",
+            xaxis_title="Tydzień Roku", yaxis_title="Złotówki na m² [PLN / m²]",
+            template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            height=340, legend=dict(orientation="h", y=1.15, x=0.0)
+        )
+        st.plotly_chart(fig_m2_trend, use_container_width=True)
+
+        # ---------------------------------------------------------
+        # WYKRES: KOSZTY CO VS OPŁATY CAŁKOWITE (CZYNSZ SSM)
         # ---------------------------------------------------------
         st.markdown("---")
         st.markdown("#### 🏢 Struktura Opłat Całkowitych (Czynsz SSM vs Rzeczywisty Koszt CO)")
         st.caption(f"Porównanie miesięczne opłat stałych (eksploatacja, woda, fundusz: **{SSM_NON_HEATING_RENT:.2f} PLN**), zaliczki na CO (**{SSM_CO_MONTHLY_ADVANCE:.2f} PLN**) oraz **rzeczywistego poboru ciepła Sonoff**.")
 
-        # Wyliczenia do interaktywnego wykresu opłat całkowitych
         weeks_in_data = sorted(df_sonoff_all["week_num"].unique()) if not df_sonoff_all.empty else [37]
         
         chart_data_rent = []
         for w in weeks_in_data:
             w_units = df_sonoff_all[df_sonoff_all["week_num"] == w]["delta_units"].sum() if not df_sonoff_all.empty else 0.0
             w_co_cost_real = w_units * EST_PLN_PER_UNIT
-            w_co_advance = SSM_CO_MONTHLY_ADVANCE / 4.28 # Przelicznik tygodniowy
+            w_co_advance = SSM_CO_MONTHLY_ADVANCE / 4.28
             w_fixed_rent = SSM_NON_HEATING_RENT / 4.28
             w_total_rent_advance = w_fixed_rent + w_co_advance
             w_total_rent_actual = w_fixed_rent + w_co_cost_real
@@ -859,8 +937,6 @@ with tab_season_comp:
         col_r1, col_r2 = st.columns([2, 1])
         with col_r1:
             fig_total_fees = px_go.Figure()
-            
-            # Słupki skumulowane: Opłaty stałe + Realne CO
             fig_total_fees.add_trace(px_go.Bar(
                 x=df_rent_chart["Tydzień"], y=df_rent_chart["Opłaty Stałe (Czynsz bez CO)"],
                 name="Opłaty Stałe SSM (Eksploatacja/Woda)", marker_color="#8E8E93"
@@ -869,8 +945,6 @@ with tab_season_comp:
                 x=df_rent_chart["Tydzień"], y=df_rent_chart["Rzeczywiste CO (Sonoff)"],
                 name="Rzeczywisty Koszt CO (Sonoff)", marker_color="#007AFF"
             ))
-            
-            # Linia poziomu pobieranego czynszu z zaliczką SSM
             fig_total_fees.add_trace(px_go.Scatter(
                 x=df_rent_chart["Tydzień"], y=df_rent_chart["Czynsz Całkowity z Zaliczką"],
                 name="Wpłacany Czynsz Całkowity (z Zaliczką CO)", mode="lines+markers",
@@ -887,7 +961,6 @@ with tab_season_comp:
             st.plotly_chart(fig_total_fees, use_container_width=True)
 
         with col_r2:
-            # Wykres kołowy struktury całkowitego czynszu
             avg_co_real = df_rent_chart["Rzeczywiste CO (Sonoff)"].mean() if not df_rent_chart.empty else 0.0
             fixed_rent_weekly = SSM_NON_HEATING_RENT / 4.28
             
@@ -960,7 +1033,6 @@ with tab_analytics:
 with tab_ai_pred:
     st.markdown("### 🤖 Predykcja AI, Wykrywanie Anomalii & Prędkościomierz Budżetowy SSM")
     
-    # SILNIK ANOMALII
     anomaly_detected = False
     anomaly_msg = ""
     if not df_room_sonoff.empty and len(df_room_sonoff) >= 2:
