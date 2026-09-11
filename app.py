@@ -309,6 +309,16 @@ else:
     total_delta_room = 0.0
 
 live_outdoor_temp = get_outdoor_temp()
+
+# ---------------------------------------------------------
+# SYSTEM DETEKCJI ANOMALII (Smart Alerts)
+# ---------------------------------------------------------
+if not df_room.empty and len(df_room) >= 2:
+    recent_deltas = df_room["delta_units"].tail(3)
+    avg_recent = recent_deltas.mean()
+    if last_delta > (avg_recent * 1.3) and avg_recent > 0:
+        st.toast(f"⚠️ Anomalia w strefie {current_room}! Ostatni przyrost ({last_delta:.1f}U) jest o ponad 30% wyższy od średniej.", icon="🚨")
+
 if live_outdoor_temp < 10.0 and total_delta_room > 15.0:
     st.toast(f"⚠️ Uwaga! Spadek temp. do {live_outdoor_temp}°C w Siemianowicach – wysokie zużycie w strefie {current_room}!", icon="🔥")
 
@@ -405,17 +415,61 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown(f"""
-<div class="ios-balance-plus">
-    <span style="font-size: 16px; font-weight: 800; color: #34C759;">🟢 AKTYWNA LOKALIZACJA: SIEMIANOWICE ŚL. - BYTKÓW (ul. ZHP 3)</span><br>
-    <span style="font-size: 13px; color: #3A3A3C; opacity: 0.85;">
-        Automatyczna synchronizacja wtorkowa i korelacja AI z systemem Sonoff działają w czasie rzeczywistym.
-    </span>
-</div>
-""", unsafe_allow_html=True)
+# ---------------------------------------------------------
+# NOWE WIDŻETY KPI (Koszt w czasie rzeczywistym + Efektywność termiczna)
+# ---------------------------------------------------------
+df_sonoff_all = df[df["season"].str.contains("Sonoff", na=False)] if not df.empty else pd.DataFrame()
+total_apartment_units = df_sonoff_all["delta_units"].sum() if not df_sonoff_all.empty else 0.0
+total_realtime_cost = total_apartment_units * EST_PLN_PER_UNIT
+
+# Spojrzenie na poprzedni tydzień (dla dynamiki kosztów)
+unique_weeks = sorted(df_sonoff_all["week_num"].unique()) if not df_sonoff_all.empty else []
+if len(unique_weeks) >= 2:
+    w_last = unique_weeks[-1]
+    w_prev = unique_weeks[-2]
+    cost_last = df_sonoff_all[df_sonoff_all["week_num"] == w_last]["delta_units"].sum() * EST_PLN_PER_UNIT
+    cost_prev = df_sonoff_all[df_sonoff_all["week_num"] == w_prev]["delta_units"].sum() * EST_PLN_PER_UNIT
+    diff_pct = ((cost_last - cost_prev) / cost_prev * 100) if cost_prev > 0 else 0.0
+    trend_str = f"{diff_pct:+.1f}% tyg. do tyg."
+else:
+    trend_str = "Brak danych historycznych"
+
+# Efektywność termiczna (PLN / °C mrozu) -> zał. baza komfortu 20°C zewnątrz
+temp_diff_frost = max(0.1, 20.0 - live_outdoor_temp)
+thermal_efficiency_index = total_realtime_cost / temp_diff_frost
+
+kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
+with kpi_col1:
+    st.markdown(f"""
+    <div class="val-box" style="padding: 16px;">
+        <div class="val-title">💰 Łączny koszt w mieszkaniu (Real-time)</div>
+        <div class="val-num" style="color: #FF9500; font-size: 26px;">{total_realtime_cost:.2f} PLN</div>
+        <div style="font-size: 12px; color: #8E8E93; margin-top: 4px;">Trend: <b>{trend_str}</b></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi_col2:
+    st.markdown(f"""
+    <div class="val-box" style="padding: 16px;">
+        <div class="val-title">🌡️ Efektywność Termiczna (PLN / °C mrozu)</div>
+        <div class="val-num" style="color: #007AFF; font-size: 26px;">{thermal_efficiency_index:.2f} zł / °C</div>
+        <div style="font-size: 12px; color: #8E8E93; margin-top: 4px;">Δ odczuwalna od 20°C bazowej</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with kpi_col3:
+    st.markdown(f"""
+    <div class="val-box" style="padding: 16px;">
+        <div class="val-title">🏢 Suma Grzejników w Mieszkaniu</div>
+        <div class="val-num" style="color: #34C759; font-size: 26px;">{total_apartment_units:.1f} U</div>
+        <div style="font-size: 12px; color: #8E8E93; margin-top: 4px;">Odpowiada licznikowi głównemu GJ</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# SIDEBAR: FORMULARZ RĘCZNEGO ODCZYTU + PANEL DEBUG
+# SIDEBAR: FORMULARZ RĘCZNEGO ODCZYTU + SYMULATOR "CO JEŚLI?"
 # ---------------------------------------------------------
 with st.sidebar:
     st.header("📥 Nowy Odczyt (Ręczny)")
@@ -479,6 +533,14 @@ with st.sidebar:
                     st.success("Zapisano i zsynchronizowano pomyślnie!")
                     st.rerun()
 
+    # SYMULATOR OSZCZĘDNOŚCI "CO JEŚLI?"
+    st.markdown("---")
+    st.header("🎛️ Symulator „Co jeśli?”")
+    temp_drop_slider = st.slider("Redukcja temp. w mieszkaniu", 0.0, 3.0, 0.5, 0.5, help="Symuluj obniżenie temperatury o X stopni.")
+    simulated_savings_units = total_apartment_units * (temp_drop_slider * 0.07) # ok 7% oszczędności na 1°C
+    simulated_savings_pln = simulated_savings_units * EST_PLN_PER_UNIT
+    st.success(f"💡 Obniżenie o **{temp_drop_slider}°C** da ok. **-{simulated_savings_units:.1f} U** oszczędności (~**{simulated_savings_pln:.2f} PLN** w sezonie).")
+
     # Szybki przycisk cofania (Undo) w panelu bocznym
     if not df.empty:
         st.markdown("---")
@@ -501,9 +563,9 @@ with st.sidebar:
 # ZAKŁADKI ANALITYCZNE
 # ---------------------------------------------------------
 tab_charts, tab_season_comp, tab_analytics, tab_ai_pred, tab_history = st.tabs([
-    "📈 Wykres & Pogoda", 
+    "📈 Wykres, Skumulowany & Pogoda", 
     "📊 Porównanie Sezonów",
-    "💸 Zyski i Straty & GJ", 
+    "💸 Zyski i Straty & Heatmapa", 
     "🤖 Predykcja AI i Raport", 
     "📋 Historia i Edycja Wpisów"
 ])
@@ -524,12 +586,28 @@ with tab_charts:
             plot_bgcolor='rgba(0,0,0,0)',
             yaxis=dict(title="Zużycie [U]"),
             yaxis2=dict(title="Temperatura [°C]", overlaying="y", side="right"),
-            height=380,
+            height=360,
             legend=dict(orientation="h", y=1.1, x=0.3)
         )
         st.plotly_chart(fig_dual, use_container_width=True)
     else:
         st.info("Brak danych dla wybranego pokoju.")
+
+    st.markdown("---")
+    st.markdown("#### 🏗️ Struktura Zużycia w Całym Mieszkaniu (Wykres Skumulowany)")
+    if not df.empty:
+        df_stack = df[df["season"].str.contains("Sonoff", na=False)]
+        if not df_stack.empty:
+            fig_stack = px.bar(
+                df_stack, x="period_label", y="delta_units", color="room_name",
+                title="Udział poszczególnych stref w tygodniowym zużyciu mieszkania",
+                labels={"period_label": "Okres", "delta_units": "Zużycie [U]", "room_name": "Strefa"},
+                barmode="stack"
+            )
+            fig_stack.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=380)
+            st.plotly_chart(fig_stack, use_container_width=True)
+        else:
+            st.info("Brak danych skumulowanych dla sezonu Sonoff.")
 
 with tab_season_comp:
     st.markdown("### 📊 Porównanie Sezonowe (Bazowy vs Sonoff)")
@@ -546,7 +624,7 @@ with tab_season_comp:
         st.info("Brak wystarczających danych do porównania sezonów.")
 
 with tab_analytics:
-    st.markdown("### 💸 Bilans Finansowy i Analiza Licznika Głównego (GJ)")
+    st.markdown("### 💸 Bilans Finansowy i Heatmapa Korelacji")
     
     if not df.empty:
         df_sonoff = df[df["season"].str.contains("Sonoff", na=False)].copy()
@@ -571,10 +649,17 @@ with tab_analytics:
             st.plotly_chart(fig_bal, use_container_width=True)
 
         with col_b:
-            df_gj = df_sonoff.groupby("room_name")["delta_gj"].sum().reset_index()
-            fig_gj = px.pie(df_gj, values="delta_gj", names="room_name", hole=0.5, title="Udział stref w całkowitym zużyciu GJ")
-            fig_gj.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=320)
-            st.plotly_chart(fig_gj, use_container_width=True)
+            st.markdown("#### 🔥 Macierz Korelacji (Temperatura zewn. vs Zużycie)")
+            if len(df_sonoff) >= 2:
+                fig_heat = px.density_heatmap(
+                    df_sonoff, x="temp_zewnetrzna", y="delta_units", z="delta_units",
+                    histfunc="avg", title="Intensywność zużycia a temperatura zewnątrz",
+                    labels={"temp_zewnetrzna": "Temp. Zewnętrzna [°C]", "delta_units": "Średnie Zużycie [U]"}
+                )
+                fig_heat.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=320)
+                st.plotly_chart(fig_heat, use_container_width=True)
+            else:
+                st.info("Zbyt mało danych do wygenerowania heatmapy.")
     else:
         st.info("Brak danych analitycznych.")
 
