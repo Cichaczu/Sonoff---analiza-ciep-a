@@ -415,7 +415,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# SIDEBAR: FORMULARZ RĘCZNEGO ODCZYTU + DEBUG & PIN
+# SIDEBAR: FORMULARZ RĘCZNEGO ODCZYTU + PANEL DEBUG
 # ---------------------------------------------------------
 with st.sidebar:
     st.header("📥 Nowy Odczyt (Ręczny)")
@@ -480,13 +480,12 @@ with st.sidebar:
                     st.rerun()
 
     st.markdown("---")
-    st.subheader("🔐 Panel Debug & PIN")
-    pin_input = st.text_input("Podaj PIN do opcji zaawansowanych", type="password")
-    if pin_input == "2026":
-        st.success("Panel odblokowany!")
-        if st.button("🔄 Reset bazy do stanu początkowego"):
+    with st.expander("🛠️ Panel Debug & Opcje Zaawansowane"):
+        st.warning("Opcje bezpośrednie – brak wymogu podawania PIN-u.")
+        if st.button("🔄 Reset bazy do stanu początkowego", use_container_width=True):
             df_reset = create_initial_df()
             save_data(df_reset, "Reset bazy do stanu zero")
+            st.success("Zresetowano bazę pomyślnie!")
             st.rerun()
 
 # ---------------------------------------------------------
