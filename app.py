@@ -32,10 +32,10 @@ SSM_SEASON_MONTHS = 7            # Sezon grzewczy (październik - kwiecień / wr
 SSM_TOTAL_WEEKS = 30             # Przybliżona liczba tygodni w sezonie
 SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity budżet zaliczkowy CO
 
-# Współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego
-LAT_LOCATION = 50.3264
-LON_LOCATION = 19.0295
-LOCATION_NAME = "Siemianowice Śl. - Bytków (ZHP)"
+# Precyzyjne współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego 3
+LAT_LOCATION = 50.3168
+LON_LOCATION = 18.9839
+LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 3)"
 
 # ---------------------------------------------------------
 # POBIERANIE POGODY I PROGNOZY Z OPENWEATHERMAP
@@ -68,7 +68,6 @@ def get_weather_forecast():
             for item in data.get('list', []):
                 dt_txt = item['dt_txt']
                 date_str = dt_txt.split(' ')[0]
-                # Bierzemy prognozy na godziny popołudniowe (np. 12:00 lub najbliższe) oraz grupujemy po dniach
                 if date_str not in seen_dates and "12:00:00" in dt_txt:
                     seen_dates.add(date_str)
                     forecasts.append({
@@ -359,6 +358,48 @@ current_room = st.session_state["selected_room"]
 st.title("🔥 Sonoff Smart Heating - Panel Sterowania & SSM Analytics")
 st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielnia Mieszkaniowa (SSM)")
 
+# ---------------------------------------------------------
+# INTEGRACJA MAPY POGODOWEJ OPENWEATHERMAP (NA WYSOKOŚCI NAGŁÓWKA)
+# ---------------------------------------------------------
+with st.expander("🗺️ Interaktywna Mapa Pogodowa OWM (Siemianowice Śl. - Bytków)", expanded=False):
+    owm_api_key = st.secrets.get("openweathermap", {}).get("api_key", "TWÓJ_KLUCZ_API")
+    # Osadzenie komponentu HTML/Leaflet z warstwą temperatury OpenWeatherMap
+    map_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <style>
+            #owm-map {{ width: 100%; height: 350px; border-radius: 12px; }}
+        </style>
+    </head>
+    <body style="margin:0;">
+        <div id="owm-map"></div>
+        <script>
+            var map = L.map('owm-map').setView([{LAT_LOCATION}, {LON_LOCATION}], 13);
+            L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
+                maxZoom: 19,
+                attribution: '&copy; OpenStreetMap'
+            }}).addTo(map);
+            
+            // Warstwa temperatury OpenWeatherMap
+            var tempLayer = L.tileLayer('https://tile.openweathermap.org/map/temp_new/{{z}}/{{x}}/{{y}}.png?appid={owm_api_key}', {{
+                maxZoom: 19,
+                opacity: 0.6,
+                attribution: 'Map data &copy; OpenWeatherMap'
+            }}).addTo(map);
+
+            L.marker([{LAT_LOCATION}, {LON_LOCATION}]).addTo(map)
+                .bindPopup('<b>Sonoff Smart Heating</b><br>ul. Związku Harcerstwa Polskiego 3, Bytków')
+                .openPopup();
+        </script>
+    </body>
+    </html>
+    """
+    st.components.v1.html(map_html, height=370)
+
 # Wyświetlenie fancy powiadomienia, jeśli jest aktywne
 if "fancy_alert" in st.session_state:
     fa = st.session_state["fancy_alert"]
@@ -422,20 +463,15 @@ if df_sonoff_all.empty:
 total_apartment_units = df_sonoff_all["delta_units"].sum() if not df_sonoff_all.empty else 0.0
 total_realtime_cost = total_apartment_units * EST_PLN_PER_UNIT
 
-# Liczba zarejestrowanych tygodni w obecnym sezonie
 weeks_logged_count = max(1, df_sonoff_all["week_num"].nunique()) if not df_sonoff_all.empty else 1
 
-# OBLICZENIA SPÓŁDZIELNIA (SSM) W CZASIE RZECZYWISTYM
 ssm_paid_advances_to_date = (weeks_logged_count / SSM_TOTAL_WEEKS) * SSM_ANNUAL_CO_BUDGET
-ssm_net_balance_to_date = ssm_paid_advances_to_date - total_realtime_cost  # Dodatni = NADPŁATA, Ujemny = NIEDOPŁATA
+ssm_net_balance_to_date = ssm_paid_advances_to_date - total_realtime_cost
 ssm_projected_full_season_cost = (total_realtime_cost / weeks_logged_count) * SSM_TOTAL_WEEKS
 ssm_projected_refund_or_extra = SSM_ANNUAL_CO_BUDGET - ssm_projected_full_season_cost
 
-# Koszt na m² lokalu
 cost_per_m2_actual = total_realtime_cost / APARTMENT_AREA_M2
 ssm_advance_per_m2_to_date = ssm_paid_advances_to_date / APARTMENT_AREA_M2
-
-# Udział procentowy strefy
 room_share_pct = 100.0 if current_room == "Licznik Główny" else ((total_delta_room / total_apartment_units * 100) if total_apartment_units > 0 else 0.0)
 
 # ---------------------------------------------------------
@@ -569,13 +605,10 @@ if len(unique_weeks) >= 2:
 else:
     trend_str = "Brak danych historycznych"
 
-# Status rozliczenia ze spółdzielnią
 if ssm_net_balance_to_date >= 0:
     ssm_status_html = f"<span style='color: #34C759; font-weight: 800;'>🟢 NADPŁATA: +{ssm_net_balance_to_date:.2f} PLN</span>"
-    ssm_subtext = "Refundacja gotówki ze Spółdzielni"
 else:
     ssm_status_html = f"<span style='color: #FF3B30; font-weight: 800;'>🔴 NIEDOPŁATA: {ssm_net_balance_to_date:.2f} PLN</span>"
-    ssm_subtext = "Wymagana dopłata na koniec sezonu"
 
 kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
 with kpi_col1:
@@ -692,7 +725,6 @@ with st.sidebar:
                     st.success("Zapisano i zsynchronizowano pomyślnie!")
                     st.rerun()
 
-    # NOWY MODUŁ: 7-DNIOWA PROGNOZA POGODY OPENWEATHERMAP I REKOMENDACJE SONOFF
     st.markdown("---")
     st.header("🌤️ Prognoza 7D (Bytków) & Sonoff AI")
     forecast_list = get_weather_forecast()
@@ -704,12 +736,11 @@ with st.sidebar:
         else:
             st.success("✅ Stabilne warunki pogodowe. Harmonogram ekologiczny Sonoff działa optymalnie.")
 
-        for f in forecast_list[:4]: # Pokazujemy najbliższe 4 dni w sidebarze
+        for f in forecast_list[:4]:
             st.markdown(f"📅 **{f['date']}**: 🌡️ **{f['temp']:.1f}°C** | _{f['desc']}_")
     else:
         st.info("Brak aktywnego klucza API OpenWeatherMap lub brak danych prognozy.")
 
-    # SYMULATOR OSZCZĘDNOŚCI
     st.markdown("---")
     st.header("🎛️ Symulator „Co jeśli?”")
     temp_change_slider = st.slider(
@@ -731,7 +762,6 @@ with st.sidebar:
     else:
         st.info("💡 Suwak w pozycji 0.0°C – brak zmian względem obecnego stanu.")
 
-    # WIDŻET ROI - ZWROT Z INWESTYCJI SONOFF
     st.markdown("---")
     st.header("💡 Zwrot z Inwestycji (ROI)")
     HARDWARE_COST_EST = 550.0
@@ -743,12 +773,10 @@ with st.sidebar:
     st.caption(f"Koszt zakupu sprzętu Sonoff: **~{HARDWARE_COST_EST:.0f} PLN**")
     st.progress(payback_ratio, text=f"Spłacono: {total_saved_pln:.2f} PLN ({payback_ratio*100:.1f}%)")
 
-    # WSKAŹNIK BUFORA BEZPIECZEŃSTWA
     weekly_avg_cost = total_realtime_cost / weeks_logged_count if weeks_logged_count > 0 else 1.0
     buffer_weeks = max(0.0, ssm_net_balance_to_date / weekly_avg_cost) if weekly_avg_cost > 0 else 0.0
     st.caption(f"🛡️ Bufor bezpiecznego grzania z zaliczek: **{buffer_weeks:.1f} tyg.**")
 
-    # Undo
     if not df.empty:
         st.markdown("---")
         if st.button("↩️ Cofnij ostatni wpis w bazie", use_container_width=True):
@@ -856,7 +884,6 @@ with tab_season_comp:
                     x=sub_df["week_num"], y=sub_df["cumulative_pln"], name=season_name, mode="lines+markers"
                 ))
             
-            # Linia zaliczek SSM
             weeks_seq = list(df_cum["week_num"].unique())
             ssm_advances_line = [(w / SSM_TOTAL_WEEKS) * SSM_ANNUAL_CO_BUDGET for w in weeks_seq]
             fig_cum.add_trace(px_go.Scatter(
@@ -871,9 +898,6 @@ with tab_season_comp:
             )
             st.plotly_chart(fig_cum, use_container_width=True)
 
-        # ---------------------------------------------------------
-        # NOWY WYKRES: KOSZT NARASTAJĄCY NA m² NA TLE STAWKI SSM
-        # ---------------------------------------------------------
         st.markdown("---")
         st.markdown("#### 📐 Narastający Koszt Ogrzewania na 1 m² Lokalu vs Średnia Stawka SSM")
         st.caption(f"Porównanie faktycznego kosztu CO w przeliczeniu na 1 m² ({APARTMENT_AREA_M2} m²) względem limitu narastającego zaliczki spółdzielczej.")
@@ -881,8 +905,6 @@ with tab_season_comp:
         df_m2_cum = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")].groupby("week_num")["delta_units"].sum().cumsum().reset_index()
         df_m2_cum["cost_per_m2"] = (df_m2_cum["delta_units"] * EST_PLN_PER_UNIT) / APARTMENT_AREA_M2
         
-        # Obliczenie narastającej stawki zaliczki SSM na m² dla dostępnych tygodni
-        weekly_ssm_advance_per_m2 = (SSM_CO_MONTHLY_ADVANCE / SSM_SEASON_MONTHS) / 4.28 # przybliżenie tygodniowe
         df_m2_cum["ssm_limit_per_m2"] = df_m2_cum.index.map(lambda i: ( (i+1) / SSM_TOTAL_WEEKS ) * (SSM_ANNUAL_CO_BUDGET / APARTMENT_AREA_M2))
 
         fig_m2_trend = px_go.Figure()
@@ -904,9 +926,6 @@ with tab_season_comp:
         )
         st.plotly_chart(fig_m2_trend, use_container_width=True)
 
-        # ---------------------------------------------------------
-        # WYKRES: KOSZTY CO VS OPŁATY CAŁKOWITE (CZYNSZ SSM)
-        # ---------------------------------------------------------
         st.markdown("---")
         st.markdown("#### 🏢 Struktura Opłat Całkowitych (Czynsz SSM vs Rzeczywisty Koszt CO)")
         st.caption(f"Porównanie miesięczne opłat stałych (eksploatacja, woda, fundusz: **{SSM_NON_HEATING_RENT:.2f} PLN**), zaliczki na CO (**{SSM_CO_MONTHLY_ADVANCE:.2f} PLN**) oraz **rzeczywistego poboru ciepła Sonoff**.")
