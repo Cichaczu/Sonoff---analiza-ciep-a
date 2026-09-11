@@ -21,6 +21,11 @@ st.set_page_config(
 FILE_PATH = "data/consumption.csv"
 EST_PLN_PER_UNIT = 2.45
 
+# Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m²
+SSM_CO_MONTHLY_ADVANCE = 774.53  # 11.64 zł / m² / mc (zaliczka miesięczna)
+SSM_SEASON_MONTHS = 7            # Sezon grzewczy (np. październik - kwiecień)
+SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity budżet zaliczkowy CO na sezon (~5421.71 zł)
+
 # Współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego
 LAT_LOCATION = 50.3264
 LON_LOCATION = 19.0295
@@ -194,24 +199,23 @@ def create_initial_df():
             "mode_tag": "Standard (Automatyczny)",
             "notes": "Stan zero - wrzesień 2026"
         },
-        # Przykładowe dane historyczne poprzedniego sezonu (Bazowego) do budżetu
         {
             "id": 3,
             "season": "2025/2026 (Bazowy)",
             "week_num": 37,
-            "period_label": "Tydzień 37",
-            "date_entry": "2025-09-09",
-            "room_name": "Sypialnia",
-            "meter_number": "11420",
-            "units_start": 100.0,
-            "units_end": 115.0,
-            "delta_units": 15.0,
+            "period_label": "Sezon Historyczny SSM",
+            "date_entry": "2025-05-01",
+            "room_name": "Licznik Główny",
+            "meter_number": "GJ-MAIN-2025",
+            "units_start": 0.0,
+            "units_end": 2212.0,
+            "delta_units": 2212.0,
             "gj_start": 0.0,
-            "gj_end": 0.0,
-            "delta_gj": 0.0,
-            "temp_zewnetrzna": 15.0,
+            "gj_end": 62.82,
+            "delta_gj": 62.82,
+            "temp_zewnetrzna": 6.5,
             "mode_tag": "Standard (Automatyczny)",
-            "notes": "Sezon historyczny"
+            "notes": "Oficjalne dane zużycia 62.82 GJ"
         }
     ])
 
@@ -333,12 +337,8 @@ total_realtime_cost = total_apartment_units * EST_PLN_PER_UNIT
 # Udział procentowy strefy w mieszkaniu
 room_share_pct = (total_delta_room / total_apartment_units * 100) if total_apartment_units > 0 else 0.0
 
-# Automatyczny budżet z Ostatniego Roku (Sezon Bazowy 2025/2026)
-df_base_all = df[df["season"].str.contains("Bazowy", na=False)] if not df.empty else pd.DataFrame()
-last_season_total_units = df_base_all["delta_units"].sum() if not df_base_all.empty else 1.0
-if last_season_total_units <= 0:
-    last_season_total_units = 100.0  # Awaryjny fallback
-last_season_budget_pln = last_season_total_units * EST_PLN_PER_UNIT
+# Budżet oparty na oficjalnej zaliczce ze spółdzielni (774,53 zł / mc)
+season_budget_pln = SSM_ANNUAL_CO_BUDGET
 
 # ---------------------------------------------------------
 # AUTOMATYCZNE OKNO (MODAL) DLA WTORKOWYCH ODCZYTÓW
@@ -436,7 +436,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# WIDŻETY KPI (Koszt w czasie rzeczywistym + Efektywność + Budżet zeszłoroczny)
+# WIDŻETY KPI (Koszt w czasie rzeczywistym + Efektywność + Budżet SSM)
 # ---------------------------------------------------------
 unique_weeks = sorted(df_sonoff_all["week_num"].unique()) if not df_sonoff_all.empty else []
 if len(unique_weeks) >= 2:
@@ -452,7 +452,7 @@ else:
 temp_diff_frost = max(0.1, 20.0 - live_outdoor_temp)
 thermal_efficiency_index = total_realtime_cost / temp_diff_frost
 
-budget_progress_ratio = min(1.0, total_realtime_cost / last_season_budget_pln) if last_season_budget_pln > 0 else 0.0
+budget_progress_ratio = min(1.0, total_realtime_cost / season_budget_pln) if season_budget_pln > 0 else 0.0
 
 kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
 with kpi_col1:
@@ -476,11 +476,11 @@ with kpi_col2:
 with kpi_col3:
     st.markdown(f"""
     <div class="val-box" style="padding: 16px;">
-        <div class="val-title">🎯 Budżet Sezonowy (vs Ostatni Rok)</div>
-        <div class="val-num" style="color: #34C759; font-size: 22px;">{total_realtime_cost:.1f} / {last_season_budget_pln:.1f} zł</div>
+        <div class="val-title">🎯 Budżet Sezonowy SSM (774,53 zł / mc)</div>
+        <div class="val-num" style="color: #34C759; font-size: 22px;">{total_realtime_cost:.1f} / {season_budget_pln:.1f} zł</div>
     </div>
     """, unsafe_allow_html=True)
-    st.progress(budget_progress_ratio, text=f"Wykorzystanie budżetu zeszłorocznego: {budget_progress_ratio*100:.1f}% (Cel: schodzimy niżej)")
+    st.progress(budget_progress_ratio, text=f"Wykorzystanie zaliczki spółdzielni: {budget_progress_ratio*100:.1f}% (Cel: optymalizacja i nadpłata)")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -714,7 +714,7 @@ with tab_ai_pred:
     with col_p1:
         st.info("💡 **Inteligentna Analiza i Harmonogram (Smart Scheduling):**\n\n"
                 f"- System wykrywa temperaturę w Bytkowie (`{live_outdoor_temp}°C`).\n"
-                "- Cel redukcji wydatków względem zeszłorocznego budżetu realizowany jest pomyślnie.\n"
+                "- Cel redukcji wydatków względem zaliczki spółdzielni realizowany jest pomyślnie.\n"
                 "- Brak gwałtownych anomalii skokowych w strefach.")
     with col_p2:
         est_monthly_units = total_delta_room * 4.2
