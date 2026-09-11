@@ -33,7 +33,6 @@ st.markdown("""
     }
     .main { background: linear-gradient(180deg, #F2F2F7 0%, #E5E5EA 100%) !important; }
 
-    /* Płynne karty z efektem glassmorphism i powiększeniem po najechaniu */
     .ios-room-info-card {
         background: rgba(255, 255, 255, 0.85) !important;
         backdrop-filter: blur(30px) saturate(190%);
@@ -67,7 +66,6 @@ st.markdown("""
         font-family: monospace;
     }
 
-    /* Pudełka wartości z dynamicznym podświetleniem */
     .val-box {
         background: rgba(248, 249, 250, 0.9);
         border-radius: 16px;
@@ -96,7 +94,6 @@ st.markdown("""
         margin-top: 2px;
     }
 
-    /* Dynamiczne bannery bilansu */
     .ios-balance-plus {
         background: linear-gradient(135deg, rgba(52, 199, 89, 0.18) 0%, rgba(255, 255, 255, 0.95) 100%);
         border: 2px solid #34C759;
@@ -121,7 +118,6 @@ st.markdown("""
         to { opacity: 1; transform: translateY(0); }
     }
 
-    /* Stylizacja zakładek w klimacie iOS Segmented Control */
     .stTabs [data-baseweb="tab-list"] {
         gap: 6px;
         background: rgba(120, 120, 128, 0.12) !important;
@@ -147,8 +143,8 @@ st.markdown("""
 # ---------------------------------------------------------
 ROOMS_CONFIG = {
     "Salon": {"icon": "🛋️", "meter_default": "POD-SAL-2026"},
-    "Sypialnia": {"icon": "🛏️", "meter_default": "POD-SYP-2026"},
-    "Pokój Dziecka": {"icon": "🧒", "meter_default": "POD-DZI-2026"},
+    "Sypialnia": {"icon": "🛏️", "meter_default": "11420"},
+    "Pokój Dziecka": {"icon": "🧒", "meter_default": "11420"},
     "Licznik Główny": {"icon": "🏢", "meter_default": "GJ-MAIN-2026"}
 }
 
@@ -253,7 +249,7 @@ if not df_room.empty:
 else:
     last_meter = ROOMS_CONFIG[current_room]["meter_default"]
     val_start = 0.0
-    val_end = 0.0
+    val_end = 126.7 if current_room == "Sypialnia" else (110.4 if current_room == "Pokój Dziecka" else 0.0)
     last_date = "Brak odczytów"
     total_delta_room = 0.0
 
@@ -331,7 +327,7 @@ with st.sidebar:
     period_tag = f"Tydzień {week_input:02d} (Wtorek)"
 
     st.info(f"📆 Domyślny Wtorek: **{tuesday_date.strftime('%d.%m.%Y')}**")
-    suggested_start = val_end if val_end > 0 else 0.0
+    suggested_start = val_end if val_end > 0 else (126.7 if current_room == "Sypialnia" else (110.4 if current_room == "Pokój Dziecka" else 0.0))
 
     with st.form("tuesday_form"):
         meter_input = st.text_input("Numer Podzielnika", value=last_meter)
@@ -425,7 +421,6 @@ with tab_analytics:
         df_merged["pln_balance"] = df_merged["units_saved"] * EST_PLN_PER_UNIT
         df_merged["color"] = df_merged["pln_balance"].apply(lambda x: "#34C759" if x >= 0 else "#FF3B30")
 
-        # 1. Wykres zysków i strat PLN
         fig_bal = px_go.Figure()
         fig_bal.add_trace(px_go.Bar(
             x=df_merged["period_label"],
