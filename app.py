@@ -30,10 +30,9 @@ LOCATION_NAME = "Siemianowice Śl. - Bytków (ZHP)"
 # POBIERANIE POGODY Z OPENWEATHERMAP
 # ---------------------------------------------------------
 def get_outdoor_temp():
-    # Próba pobrania klucza API ze secrets Streamlit, jeśli brak - zwraca wartość symulowaną/szacunkową
     api_key = st.secrets.get("openweathermap", {}).get("api_key", None)
     if not api_key:
-        return 12.5 # Domyślna temperatura symulowana dla okresu przejściowego
+        return 12.5
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?lat={LAT_LOCATION}&lon={LON_LOCATION}&appid={api_key}&units=metric"
         res = requests.get(url, timeout=3)
@@ -51,7 +50,6 @@ if "dark_mode" not in st.session_state:
 
 is_dark = st.session_state["dark_mode"]
 
-# Dynamiczne style CSS (iOS 18 Glassmorphism dla Dark / Light Mode)
 bg_main = "#1C1C1E" if is_dark else "linear-gradient(180deg, #F2F2F7 0%, #E5E5EA 100%)"
 text_color = "#FFFFFF" if is_dark else "#1C1C1E"
 card_bg = "rgba(30, 30, 30, 0.85)" if is_dark else "rgba(255, 255, 255, 0.85)"
@@ -67,7 +65,7 @@ st.markdown(f"""
     html, body, [class*="css"] {{
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif !important;
         color: {text_color} !important;
-    }
+    }}
     .main {{ background: {bg_main} !important; }}
 
     .ios-room-info-card {{
@@ -85,14 +83,14 @@ st.markdown(f"""
         transform: translateY(-4px) scale(1.01) !important;
         box-shadow: 0 18px 45px rgba(0, 122, 255, 0.2) !important;
         border-color: rgba(0, 122, 255, 0.6) !important;
-    }
+    }}
 
     .room-header {{
         font-size: 20px;
         font-weight: 700;
         color: {text_color};
         letter-spacing: -0.4px;
-    }
+    }}
     .meter-badge {{
         background: rgba(120, 120, 128, 0.2);
         color: {text_color};
@@ -101,7 +99,7 @@ st.markdown(f"""
         font-size: 12px;
         font-weight: 600;
         font-family: monospace;
-    }
+    }}
 
     .val-box {{
         background: {val_box_bg};
@@ -110,25 +108,25 @@ st.markdown(f"""
         border: 1px solid {val_box_border};
         text-align: center;
         transition: all 0.25s ease;
-    }
+    }}
     .val-box:hover {{
         border-color: #007AFF;
         box-shadow: 0 4px 15px rgba(0, 122, 255, 0.2);
         transform: scale(1.02);
-    }
+    }}
     .val-title {{
         font-size: 10px;
         text-transform: uppercase;
         color: {sub_text_color};
         font-weight: 700;
         letter-spacing: 0.6px;
-    }
+    }}
     .val-num {{
         font-size: 22px;
         font-weight: 800;
         color: #0A84FF;
         margin-top: 2px;
-    }
+    }}
 
     .ios-balance-plus {{
         background: linear-gradient(135deg, rgba(52, 199, 89, 0.18) 0%, rgba(50, 50, 50, 0.2) 100%);
@@ -137,7 +135,7 @@ st.markdown(f"""
         padding: 18px 22px;
         margin-bottom: 22px;
         box-shadow: 0 8px 25px rgba(52, 199, 89, 0.15);
-    }
+    }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -216,7 +214,6 @@ def load_data():
         df = load_local_fallback()
     
     if df is not None and not df.empty:
-        # Automatyczna korekta stanu zero
         mask_zero = df["period_label"].str.contains("Stan Zero", na=False)
         if mask_zero.any():
             df.loc[mask_zero, "units_start"] = df.loc[mask_zero, "units_end"]
@@ -308,7 +305,6 @@ else:
     last_date = "Brak odczytów"
     total_delta_room = 0.0
 
-# Sprawdzanie alertów (toast)
 live_outdoor_temp = get_outdoor_temp()
 if live_outdoor_temp < 10.0 and total_delta_room > 15.0:
     st.toast(f"⚠️ Uwaga! Spadek temp. do {live_outdoor_temp}°C w Siemianowicach – wysokie zużycie w strefie {current_room}!", icon="🔥")
