@@ -546,7 +546,7 @@ if is_tuesday:
               st.rerun()
 
 # ---------------------------------------------------------
-# KARTA INFORMACYJNA iOS 18
+# KARTA INFORMACYJNA iOS 18 (Z PRZELICZENIEM NA PLN)
 # ---------------------------------------------------------
 st.markdown(
     f"""
@@ -561,10 +561,26 @@ st.markdown(
         </div>
     </div>
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;">
-        <div class="val-box"><div class="val-title">Początek Sezonu</div><div class="val-num">{val_start:.1f} U</div></div>
-        <div class="val-box"><div class="val-title">Stan Aktualny</div><div class="val-num">{val_end:.1f} U</div></div>
-        <div class="val-box"><div class="val-title">Ostatni Przyrost</div><div class="val-num" style="color: #34C759;">+{last_delta:.1f} U</div></div>
-        <div class="val-box"><div class="val-title">Suma Strefa</div><div class="val-num" style="color: #AF52DE;">{total_delta_room:.1f} U</div></div>
+        <div class="val-box">
+            <div class="val-title">Początek Sezonu</div>
+            <div class="val-num">{val_start:.1f} U</div>
+            <div style="font-size: 11px; color: #8E8E93; margin-top: 2px;">{val_start*EST_PLN_PER_UNIT:.2f} PLN</div>
+        </div>
+        <div class="val-box">
+            <div class="val-title">Stan Aktualny</div>
+            <div class="val-num">{val_end:.1f} U</div>
+            <div style="font-size: 11px; color: #8E8E93; margin-top: 2px;">{val_end*EST_PLN_PER_UNIT:.2f} PLN</div>
+        </div>
+        <div class="val-box">
+            <div class="val-title">Ostatni Przyrost</div>
+            <div class="val-num" style="color: #34C759;">+{last_delta:.1f} U</div>
+            <div style="font-size: 11px; color: #34C759; margin-top: 2px;">+{last_delta*EST_PLN_PER_UNIT:.2f} PLN</div>
+        </div>
+        <div class="val-box">
+            <div class="val-title">Suma Strefa</div>
+            <div class="val-num" style="color: #AF52DE;">{total_delta_room:.1f} U</div>
+            <div style="font-size: 11px; color: #AF52DE; margin-top: 2px;">{total_delta_room*EST_PLN_PER_UNIT:.2f} PLN</div>
+        </div>
     </div>
 </div>
 """,
