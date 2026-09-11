@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 # KONFIGURACJA STRONY
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Sonoff Heating - Stabilna Wersja + Analityka",
+    page_title="Sonoff Heating - iOS 18 Dynamic Analytics",
     page_icon="🔥",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -21,82 +21,123 @@ FILE_PATH = "data/consumption.csv"
 EST_PLN_PER_UNIT = 2.45
 
 # ---------------------------------------------------------
-# STYLIZACJA (CZYSTY, SPRAWDZONY DESIGN iOS)
+# STYLIZACJA iOS 18 (GLASSMORPHISM, DYNAMIC HOVER & TRANSITIONS)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
+    @import url('https://fonts.cdnfonts.com/css/sf-pro-display');
+    
     html, body, [class*="css"] {
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
-    }
-    .main { background-color: #F2F2F7; }
-
-    .ios-room-info-card {
-        background: rgba(255, 255, 255, 0.92);
-        backdrop-filter: blur(25px);
-        border-radius: 20px;
-        padding: 20px 24px;
-        border: 1px solid rgba(255, 255, 255, 0.8);
-        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.04);
-        margin-bottom: 20px;
-    }
-    .room-header {
-        font-size: 19px;
-        font-weight: 700;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif !important;
         color: #1C1C1E;
     }
+    .main { background: linear-gradient(180deg, #F2F2F7 0%, #E5E5EA 100%) !important; }
+
+    /* Płynne karty z efektem glassmorphism i powiększeniem po najechaniu */
+    .ios-room-info-card {
+        background: rgba(255, 255, 255, 0.85) !important;
+        backdrop-filter: blur(30px) saturate(190%);
+        -webkit-backdrop-filter: blur(30px) saturate(190%);
+        border-radius: 24px !important;
+        padding: 22px 26px !important;
+        border: 1.5px solid rgba(255, 255, 255, 0.9) !important;
+        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.05) !important;
+        transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+        margin-bottom: 22px;
+    }
+    .ios-room-info-card:hover {
+        transform: translateY(-4px) scale(1.01) !important;
+        box-shadow: 0 18px 45px rgba(0, 122, 255, 0.15) !important;
+        border-color: rgba(0, 122, 255, 0.4) !important;
+    }
+
+    .room-header {
+        font-size: 20px;
+        font-weight: 700;
+        color: #1C1C1E;
+        letter-spacing: -0.4px;
+    }
     .meter-badge {
-        background: #E5E5EA;
+        background: rgba(120, 120, 128, 0.12);
         color: #3A3A3C;
-        padding: 4px 10px;
-        border-radius: 10px;
+        padding: 5px 12px;
+        border-radius: 12px;
         font-size: 12px;
         font-weight: 600;
         font-family: monospace;
     }
+
+    /* Pudełka wartości z dynamicznym podświetleniem */
     .val-box {
-        background: #F8F9FA;
-        border-radius: 12px;
-        padding: 10px 14px;
-        border: 1px solid #E5E5EA;
+        background: rgba(248, 249, 250, 0.9);
+        border-radius: 16px;
+        padding: 12px 14px;
+        border: 1px solid rgba(229, 229, 234, 0.8);
         text-align: center;
+        transition: all 0.25s ease;
+    }
+    .val-box:hover {
+        background: #FFFFFF;
+        border-color: #007AFF;
+        box-shadow: 0 4px 15px rgba(0, 122, 255, 0.1);
+        transform: scale(1.02);
     }
     .val-title {
         font-size: 10px;
         text-transform: uppercase;
         color: #8E8E93;
         font-weight: 700;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.6px;
     }
     .val-num {
         font-size: 22px;
         font-weight: 800;
         color: #007AFF;
-    }
-    
-    .ios-balance-plus {
-        background: linear-gradient(135deg, rgba(52, 199, 89, 0.15) 0%, rgba(255, 255, 255, 0.95) 100%);
-        border: 2px solid #34C759;
-        border-radius: 18px;
-        padding: 16px 20px;
-        margin-bottom: 20px;
-    }
-    .ios-balance-minus {
-        background: linear-gradient(135deg, rgba(255, 59, 48, 0.15) 0%, rgba(255, 255, 255, 0.95) 100%);
-        border: 2px solid #FF3B30;
-        border-radius: 18px;
-        padding: 16px 20px;
-        margin-bottom: 20px;
+        margin-top: 2px;
     }
 
+    /* Dynamiczne bannery bilansu */
+    .ios-balance-plus {
+        background: linear-gradient(135deg, rgba(52, 199, 89, 0.18) 0%, rgba(255, 255, 255, 0.95) 100%);
+        border: 2px solid #34C759;
+        border-radius: 20px;
+        padding: 18px 22px;
+        margin-bottom: 22px;
+        box-shadow: 0 8px 25px rgba(52, 199, 89, 0.12);
+        animation: fadeIn 0.5s ease-out;
+    }
+    .ios-balance-minus {
+        background: linear-gradient(135deg, rgba(255, 59, 48, 0.18) 0%, rgba(255, 255, 255, 0.95) 100%);
+        border: 2px solid #FF3B30;
+        border-radius: 20px;
+        padding: 18px 22px;
+        margin-bottom: 22px;
+        box-shadow: 0 8px 25px rgba(255, 59, 48, 0.12);
+        animation: fadeIn 0.5s ease-out;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Stylizacja zakładek w klimacie iOS Segmented Control */
     .stTabs [data-baseweb="tab-list"] {
         gap: 6px;
-        background-color: #E5E5EA;
-        padding: 4px;
-        border-radius: 14px;
+        background: rgba(120, 120, 128, 0.12) !important;
+        backdrop-filter: blur(20px);
+        padding: 6px;
+        border-radius: 16px !important;
+    }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 12px !important;
+        font-weight: 600;
+        transition: all 0.2s ease;
     }
     .stTabs [aria-selected="true"] {
         background-color: #FFFFFF !important;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        color: #000000 !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -184,8 +225,8 @@ if "selected_room" not in st.session_state:
 
 current_room = st.session_state["selected_room"]
 
-st.title("🔥 Sonoff Smart Heating - Panel Sterowania i Odczytów")
-st.caption("Stabilny układ z cotygodniowymi odczytami (Wtorki) oraz rozbudowaną analityką zysków i strat")
+st.title("🔥 Sonoff Smart Heating - Panel Sterowania")
+st.caption("Płynne zarządzanie, zaawansowane wykresy zysk/strata oraz pełna integracja iOS glassmorphism")
 
 room_cols = st.columns(len(ROOMS_CONFIG))
 for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
@@ -217,7 +258,7 @@ else:
     total_delta_room = 0.0
 
 # ---------------------------------------------------------
-# KARTA INFORMACYJNA POMIESZCZENIA
+# KARTA INFORMACYJNA (GLASSMORPHISM + HOVER)
 # ---------------------------------------------------------
 st.markdown(f"""
 <div class="ios-room-info-card">
@@ -251,7 +292,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# Bilans finansowy pokoju
 base_room = df_room[df_room["season"] == "2025/2026 (Bazowy)"]["delta_units"].sum()
 diff_units = base_room - total_delta_room
 pln_balance = diff_units * EST_PLN_PER_UNIT
@@ -260,7 +300,7 @@ if total_delta_room > 0:
     if diff_units >= 0:
         st.markdown(f"""
         <div class="ios-balance-plus">
-            <span style="font-size: 16px; font-weight: 800; color: #1E7E34;">🟢 JESTEŚ NA PLUSIE! (+{pln_balance:.2f} PLN)</span><br>
+            <span style="font-size: 16px; font-weight: 800; color: #1E7E34;">🟢 DODATNI BILANS FINANSOWY (+{pln_balance:.2f} PLN)</span><br>
             <span style="font-size: 13px; color: #2C3E50;">
                 W strefie <b>{current_room}</b> zaoszczędziłeś <b>{diff_units:.0f} U</b> względem roku bazowego.
             </span>
@@ -269,9 +309,9 @@ if total_delta_room > 0:
     else:
         st.markdown(f"""
         <div class="ios-balance-minus">
-            <span style="font-size: 16px; font-weight: 800; color: #D32F2F;">🔴 JESTEŚ NA MINUSIE ({pln_balance:.2f} PLN)</span><br>
+            <span style="font-size: 16px; font-weight: 800; color: #D32F2F;">🔴 UJEMNY BILANS FINANSOWY ({pln_balance:.2f} PLN)</span><br>
             <span style="font-size: 13px; color: #2C3E50;">
-                W strefie <b>{current_room}</b> zużycie wzrosło o <b>{abs(diff_units):.0f} U</b>. Rozważ korektę harmonogramu.
+                W strefie <b>{current_room}</b> zużycie wzrosło o <b>{abs(diff_units):.0f} U</b>.
             </span>
         </div>
         """, unsafe_allow_html=True)
@@ -284,7 +324,6 @@ with st.sidebar:
     st.caption(f"Strefa: **{current_room}**")
 
     season_input = st.selectbox("Sezon grzewczy", SEASONS, index=1)
-    
     current_year, current_iso_w, _ = date.today().isocalendar()
     week_input = st.number_input("Tydzień Roku (1 - 52)", min_value=1, max_value=52, value=current_iso_w)
     
@@ -342,7 +381,7 @@ with st.sidebar:
                     st.rerun()
 
 # ---------------------------------------------------------
-# ZAKŁADKI: WYKRESY I HISTORIA
+# ZAKŁADKI ANALITYCZNE
 # ---------------------------------------------------------
 tab_charts, tab_analytics, tab_history = st.tabs([
     "📈 Wykres Pokoju", 
@@ -362,6 +401,8 @@ with tab_charts:
         ))
         fig.update_layout(
             template="plotly_white",
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
             margin=dict(l=20, r=20, t=20, b=20),
             height=350
         )
@@ -396,6 +437,8 @@ with tab_analytics:
         fig_bal.update_layout(
             title="Tygodniowy Bilans PLN (Zielony = Oszczędność, Czerwony = Strata)",
             template="plotly_white",
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
             height=350,
             yaxis_title="PLN"
         )
@@ -403,7 +446,6 @@ with tab_analytics:
 
         col1, col2 = st.columns(2)
         with col1:
-            # 2. Skumulowane oszczędności
             df_merged["cum_pln"] = df_merged["pln_balance"].cumsum()
             fig_cum = px_go.Figure()
             fig_cum.add_trace(px_go.Scatter(
@@ -413,14 +455,13 @@ with tab_analytics:
                 fill="tozeroy",
                 line=dict(color="#34C759", width=3)
             ))
-            fig_cum.update_layout(title="Skumulowany Bilans Finansowy [PLN]", template="plotly_white", height=300)
+            fig_cum.update_layout(title="Skumulowany Bilans Finansowy [PLN]", template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300)
             st.plotly_chart(fig_cum, use_container_width=True)
 
         with col2:
-            # 3. Udział stref
             df_pie = df_sonoff.groupby("room_name")["delta_units"].sum().reset_index()
             fig_pie = px.pie(df_pie, values="delta_units", names="room_name", hole=0.5, title="Udział Stref w Zużyciu")
-            fig_pie.update_layout(template="plotly_white", height=300)
+            fig_pie.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300)
             st.plotly_chart(fig_pie, use_container_width=True)
     else:
         st.info("Brak wystarczających danych do wygenerowania wykresów analitycznych.")
