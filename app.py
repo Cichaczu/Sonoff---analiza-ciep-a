@@ -11,7 +11,7 @@ from datetime import date
 # KONFIGURACJA STRONY STREAMLIT
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Analiza Oszczędności Ogrzewania - Sonoff",
+    page_title="Analiza Oszczędności Ogrzewania - Sonoff & GJ",
     page_icon="🔥",
     layout="wide"
 )
@@ -36,11 +36,12 @@ def get_github_repo():
     return None
 
 def create_empty_df():
-    """Tworzenie pustej struktury DataFrame."""
+    """Tworzenie pustej struktury DataFrame z obsługą jednostek U oraz energii w GJ."""
     return pd.DataFrame(columns=[
         "id", "season", "period_code", "period_label", "date_entry",
         "room_name", "units_start", "units_end", "delta_units",
-        "hdd", "sgi", "notes"
+        "gj_start", "gj_end", "delta_gj", "hdd", "sgi", "sgi_gj",
+        "cost_per_gj", "notes"
     ])
 
 def load_data():
@@ -48,23 +49,33 @@ def load_data():
     repo = get_github_repo()
     branch = st.secrets.get("github", {}).get("branch", "main")
     
+    df = None
     if repo:
         try:
             file_content = repo.get_contents(FILE_PATH, ref=branch)
             csv_raw = file_content.decoded_content.decode('utf-8')
-            return pd.read_csv(io.StringIO(csv_raw))
+            df = pd.read_csv(io.StringIO(csv_raw))
         except GithubException as e:
             if e.status == 404:
                 df = create_empty_df()
                 save_data(df, commit_message="Inicjalizacja pliku data/consumption.csv")
-                return df
             else:
                 st.warning(f"Brak dostępu do GitHub (Kod HTTP {e.status}). Przełączono w tryb lokalny.")
-                return load_local_fallback()
+                df = load_local_fallback()
         except Exception:
-            return load_local_fallback()
+            df = load_local_fallback()
     else:
-        return load_local_fallback()
+        df = load_local_fallback()
+
+    # Zapewnienie obecności wszystkich wymaganych kolumn (dla starszych wersji pliku CSV)
+    required_cols = create_empty_df().columns
+    for col in required_cols:
+        if col not in df.columns:
+            if col in ["gj_start", "gj_end", "delta_gj", "sgi_gj", "cost_per_gj"]:
+                df[col] = 0.0
+            else:
+                df[col] = None
+    return df
 
 def load_local_fallback():
     """Wczytywanie z lokalnego pliku na dysku."""
@@ -145,8 +156,8 @@ ROOMS = ["Suma Całkowita", "Salon", "Sypialnia", "Kuchnia", "Pokój Dziecka"]
 # ---------------------------------------------------------
 # INTERFEJS UŻYTKOWNIKA & FORMULARZ
 # ---------------------------------------------------------
-st.title("🔥 Monitor Efektywności Termostatów Sonoff")
-st.caption("Aplikacja porównuje zużycie energii z podzielników po normalizacji pogodowej wskaźnikiem HDD (Heating Degree Days).")
+st.title("🔥 Monitor Efektywności Termostatów Sonoff & Licznika GJ")
+st.caption("Aplikacja analizuje zużycie energii z podzielników (U) oraz głównego ciepłomierza (GJ) po normalizacji pogodowej HDD.")
 
 df = load_data()
 
@@ -158,34 +169,56 @@ with st.sidebar:
         room_name = st.selectbox("Pomieszczenie / Licznik", ROOMS)
         
         st.markdown("---")
-        st.subheader("Odczyty z Podzielnika")
+        st.subheader("1. Odczyty z Podzielnika (Jednostki U)")
         col_u1, col_u2 = st.columns(2)
-        units_start = col_u1.number_input("Stan początkowy", min_value=0.0, value=0.0, step=1.0)
-        units_end = col_u2.number_input("Stan końcowy", min_value=0.0, value=0.0, step=1.0)
+        units_start = col_u1.number_input("Jednostki początek", min_value=0.0, value=0.0, step=1.0)
+        units_end = col_u2.number_input("Jednostki koniec", min_value=0.0, value=0.0, step=1.0)
         
-        manual_delta = st.number_input("Lub wpisz bezpośrednio różnicę (ΔU)", min_value=0.0, value=0.0, step=1.0,
-                                       help="Użyj tego pola, jeśli podajesz wyliczone zużycie bez wpisywania stanu początkowego i końcowego.")
+        manual_delta_u = st.number_input("Lub bezpośrednio różnica jednostek (ΔU)", min_value=0.0, value=0.0, step=1.0,
+                                         help="Użyj tego pola, jeśli podajesz wyliczone zużycie bez stanu początkowego/końcowego.")
         
+        st.markdown("---")
+        st.subheader("2. Odczyt Ciepłomierza Głównego (GJ)")
+        col_gj1, col_gj2 = st.columns(2)
+        gj_start = col_gj1.number_input("GJ początek", min_value=0.0, value=0.0, step=0.01, format="%.2f")
+        gj_end = col_gj2.number_input("GJ koniec", min_value=0.0, value=0.0, step=0.01, format="%.2f")
+        
+        manual_delta_gj = st.number_input("Lub bezpośrednio zużycie w GJ (ΔGJ)", min_value=0.0, value=0.0, step=0.01, format="%.2f",
+                                          help="Podaj pobór energii w gigadżulach z głównego licznika za ten okres.")
+
+        st.markdown("---")
+        st.subheader("3. Pogoda i Koszty")
         hdd_input = st.number_input("Liczba Stopniodni (HDD)", min_value=0.1, value=150.0, step=0.1,
-                                    help="Suma HDD dla Twojego miasta dla ostatnich 2 tygodni.")
+                                    help="Suma HDD dla Twojej miejscowości dla ostatnich 2 tygodni.")
+        
+        cost_per_gj = st.number_input("Cena za 1 GJ (PLN)", min_value=0.0, value=95.0, step=1.0,
+                                      help="Koszt 1 GJ wg taryfy dostawcy ciepła.")
         
         date_entry = st.date_input("Data wpisu", date.today())
         notes = st.text_input("Uwagi / Nastawy harmonogramu", value="")
         
-        submitted = st.form_submit_button("💾 Zapisz Odczyt")
+        submitted = st.form_submit_button("💾 Zapisz i Przelicz Odczyt")
         
         if submitted:
-            if (units_end > units_start) and (manual_delta == 0):
+            # Wyliczenie różnicy dla Podzielników
+            if (units_end > units_start) and (manual_delta_u == 0):
                 delta_units = units_end - units_start
             else:
-                delta_units = manual_delta
+                delta_units = manual_delta_u
                 
-            if delta_units <= 0:
-                st.error("Różnica jednostek (ΔU) musi być większa od 0!")
+            # Wyliczenie różnicy dla Ciepłomierza GJ
+            if (gj_end > gj_start) and (manual_delta_gj == 0):
+                delta_gj = gj_end - gj_start
             else:
-                sgi = round(delta_units / hdd_input, 4)
+                delta_gj = manual_delta_gj
+
+            if delta_units <= 0 and delta_gj <= 0:
+                st.error("Podaj poprawne wartości zużycia (ΔU > 0 lub ΔGJ > 0)!")
+            else:
+                sgi_u = round(delta_units / hdd_input, 4) if hdd_input > 0 else 0.0
+                sgi_gj = round(delta_gj / hdd_input, 6) if hdd_input > 0 else 0.0
                 
-                # Usuń istniejący wpis dla tego samego okresu, pomieszczenia i sezonu (nadpisywanie)
+                # Usunięcie dubla dla danego okresu, pomieszczenia i sezonu
                 if not df.empty and all(col in df.columns for col in ["season", "period_code", "room_name"]):
                     df = df[~((df["season"] == season) & 
                               (df["period_code"] == period_code) & 
@@ -203,14 +236,19 @@ with st.sidebar:
                     "units_start": units_start,
                     "units_end": units_end,
                     "delta_units": delta_units,
+                    "gj_start": gj_start,
+                    "gj_end": gj_end,
+                    "delta_gj": delta_gj,
                     "hdd": hdd_input,
-                    "sgi": sgi,
+                    "sgi": sgi_u,
+                    "sgi_gj": sgi_gj,
+                    "cost_per_gj": cost_per_gj,
                     "notes": notes
                 }])
                 
                 df = pd.concat([df, new_row], ignore_index=True)
                 if save_data(df, commit_message=f"Dodano odczyt: {season} - {PERIODS[period_code]} ({room_name})"):
-                    st.success("Wpis został zapisany!")
+                    st.success("Wpis został zapisany i przeliczony!")
                     st.rerun()
 
 # ---------------------------------------------------------
@@ -232,17 +270,16 @@ else:
     base_df = df_filtered[df_filtered["season"] == "2024/2025 (Bazowy)"]
     sonoff_df = df_filtered[df_filtered["season"] == "2025/2026 (Sonoff)"]
 
-    # --- KPI METRICS ---
+    # ---------------------------------------------------------
+    # KPI METRICS (U oraz GJ)
+    # ---------------------------------------------------------
     st.markdown("### 📊 Kluczowe Wskaźniki Efektywności (KPI)")
     col1, col2, col3, col4 = st.columns(4)
     
-    avg_sgi_base = base_df["sgi"].mean() if not base_df.empty else 0
-    avg_sgi_sonoff = sonoff_df["sgi"].mean() if not sonoff_df.empty else 0
+    avg_sgi_base = base_df["sgi"].mean() if not base_df.empty else 0.0
+    avg_sgi_sonoff = sonoff_df["sgi"].mean() if not sonoff_df.empty else 0.0
     
-    if avg_sgi_base > 0 and avg_sgi_sonoff > 0:
-        pct_savings = (1 - (avg_sgi_sonoff / avg_sgi_base)) * 100
-    else:
-        pct_savings = 0.0
+    pct_savings_u = ((avg_sgi_base - avg_sgi_sonoff) / avg_sgi_base * 100) if avg_sgi_base > 0 and avg_sgi_sonoff > 0 else 0.0
 
     # Łączenie okresów do porównania
     merged_comp = pd.merge(
@@ -255,139 +292,229 @@ else:
         merged_comp["expected_units"] = merged_comp["sgi_base"] * merged_comp["hdd_sonoff"]
         merged_comp["units_saved"] = merged_comp["expected_units"] - merged_comp["delta_units_sonoff"]
         total_units_saved = merged_comp["units_saved"].sum()
+        
+        # Wyliczenia dla GJ jeśli dostępne
+        if "sgi_gj_base" in merged_comp.columns and "sgi_gj_sonoff" in merged_comp.columns:
+            merged_comp["expected_gj"] = merged_comp["sgi_gj_base"] * merged_comp["hdd_sonoff"]
+            merged_comp["gj_saved"] = merged_comp["expected_gj"] - merged_comp["delta_gj_sonoff"]
+            total_gj_saved = merged_comp["gj_saved"].sum()
+        else:
+            total_gj_saved = 0.0
     else:
         total_units_saved = 0.0
+        total_gj_saved = 0.0
+
+    avg_cost_gj = df["cost_per_gj"].replace(0, pd.NA).dropna().mean()
+    if pd.isna(avg_cost_gj) or avg_cost_gj == 0:
+        avg_cost_gj = 95.0
+    
+    pln_saved = total_gj_saved * avg_cost_gj
 
     col1.metric(
-        "Średnie SGI (Bazowe 24/25)", 
-        f"{avg_sgi_base:.4f} u/HDD" if avg_sgi_base else "Brak danych"
+        "Średnie SGI (Bazowe vs Sonoff)", 
+        f"{avg_sgi_sonoff:.3f} U/HDD",
+        delta=f"{pct_savings_u:+.1f}% oszczędności" if pct_savings_u != 0 else None,
+        delta_color="normal" if pct_savings_u >= 0 else "inverse"
     )
     col2.metric(
-        "Średnie SGI (Sonoff 25/26)", 
-        f"{avg_sgi_sonoff:.4f} u/HDD" if avg_sgi_sonoff else "Brak danych",
-        delta=f"{pct_savings:+.1f}% (Oszczędność)" if pct_savings != 0 else None,
-        delta_color="normal" if pct_savings >= 0 else "inverse"
+        "Zaoszczędzona Energia (GJ)", 
+        f"{total_gj_saved:+.2f} GJ",
+        help="Suma zaoszczędzonego ciepła w gigadżulach skorygowana o stopniodnie HDD."
     )
     col3.metric(
-        "Zaoszczędzone Jednostki (Suma)", 
-        f"{total_units_saved:+.1f} u",
-        help="Liczba jednostek z podzielnika zaoszczędzona po uwzględnieniu warunków pogodowych."
+        "Szacowana Oszczędność (PLN)", 
+        f"{pln_saved:+.2f} PLN",
+        help=f"Oszczędność w PLN przeliczona według średniej ceny {avg_cost_gj:.2f} PLN / 1 GJ."
     )
     col4.metric(
-        "Porównane Okresy", 
-        f"{len(merged_comp)} okresów"
+        "Zaoszczędzone Jednostki U", 
+        f"{total_units_saved:+.1f} U"
     )
 
     st.divider()
 
-    # --- TABY Z WYKRESAMI ---
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📈 Efektywność SGI", 
+    # ---------------------------------------------------------
+    # TABY Z WYKRESAMI I AUDYTEM GJ
+    # ---------------------------------------------------------
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "📈 Efektywność SGI (U & GJ)", 
+        "🔍 Audyt & Weryfikacja Stanu GJ", 
         "🛡️ Rzeczywiste vs Oczekiwane", 
         "🌡️ Regresja: Zużycie vs HDD", 
         "📋 Tabela i ZARZĄDZANIE"
     ])
 
     with tab1:
-        st.subheader("Wskaźnik Jednostkowy SGI (Zużycie ÷ HDD)")
-        st.caption("SGI eliminuje wpływ pogody. Niższy słupka oznacza wyższą efektywność ogrzewania.")
+        st.subheader("Wskaźniki Efektywności SGI (Normalizacja Weather-HDD)")
+        col_c1, col_c2 = st.columns(2)
         
-        fig_sgi = go.Figure()
-        
-        if not base_df.empty:
-            fig_sgi.add_trace(go.Bar(
-                x=base_df["period_label"], 
-                y=base_df["sgi"],
-                name="2024/2025 (Bazowy)",
-                marker_color="#95a5a6",
-                text=base_df["sgi"].apply(lambda x: f"{x:.3f}"),
-                textposition='auto'
-            ))
-            
-        if not sonoff_df.empty:
-            fig_sgi.add_trace(go.Bar(
-                x=sonoff_df["period_label"], 
-                y=sonoff_df["sgi"],
-                name="2025/2026 (Sonoff)",
-                marker_color="#2ecc71" if pct_savings >= 0 else "#e74c3c",
-                text=sonoff_df["sgi"].apply(lambda x: f"{x:.3f}"),
-                textposition='auto'
-            ))
-            
-        fig_sgi.update_layout(
-            barmode='group',
-            xaxis_title="Okres Rozliczeniowy",
-            yaxis_title="SGI [Jednostki / HDD]",
-            hovermode="x unified",
-            template="plotly_white"
-        )
-        st.plotly_chart(fig_sgi, use_container_width=True)
+        with col_c1:
+            st.markdown("#### SGI Podzielników [Jednostki / HDD]")
+            fig_sgi = go.Figure()
+            if not base_df.empty:
+                fig_sgi.add_trace(go.Bar(
+                    x=base_df["period_label"], y=base_df["sgi"],
+                    name="2024/2025 (Bazowy)", marker_color="#95a5a6",
+                    text=base_df["sgi"].apply(lambda x: f"{x:.3f}"), textposition='auto'
+                ))
+            if not sonoff_df.empty:
+                fig_sgi.add_trace(go.Bar(
+                    x=sonoff_df["period_label"], y=sonoff_df["sgi"],
+                    name="2025/2026 (Sonoff)", marker_color="#2ecc71" if pct_savings_u >= 0 else "#e74c3c",
+                    text=sonoff_df["sgi"].apply(lambda x: f"{x:.3f}"), textposition='auto'
+                ))
+            fig_sgi.update_layout(barmode='group', xaxis_title="Okres", yaxis_title="SGI [U / HDD]", template="plotly_white")
+            st.plotly_chart(fig_sgi, use_container_width=True)
+
+        with col_c2:
+            st.markdown("#### SGI Ciepłomierza [GJ / HDD]")
+            fig_sgi_gj = go.Figure()
+            if not base_df.empty and "sgi_gj" in base_df.columns:
+                fig_sgi_gj.add_trace(go.Bar(
+                    x=base_df["period_label"], y=base_df["sgi_gj"],
+                    name="2024/2025 (Bazowy)", marker_color="#7f8c8d",
+                    text=base_df["sgi_gj"].apply(lambda x: f"{x:.4f}"), textposition='auto'
+                ))
+            if not sonoff_df.empty and "sgi_gj" in sonoff_df.columns:
+                fig_sgi_gj.add_trace(go.Bar(
+                    x=sonoff_df["period_label"], y=sonoff_df["sgi_gj"],
+                    name="2025/2026 (Sonoff)", marker_color="#3498db",
+                    text=sonoff_df["sgi_gj"].apply(lambda x: f"{x:.4f}"), textposition='auto'
+                ))
+            fig_sgi_gj.update_layout(barmode='group', xaxis_title="Okres", yaxis_title="SGI [GJ / HDD]", template="plotly_white")
+            st.plotly_chart(fig_sgi_gj, use_container_width=True)
 
     with tab2:
-        st.subheader("Ile jednostek zużyłbyś bez termostatów Sonoff?")
-        st.caption("Symulacja zużycia przy tegorocznej pogodzie (HDD), gdyby ogrzewanie działało bez automatyzacji.")
+        st.subheader("🔎 Moduł Weryfikacji Odczytów GJ i Spójności Danych")
+        st.caption("Ponowna analiza ciągłości stanów licznika GJ oraz przelicznika Jednostek (U) na 1 GJ ciepła.")
         
-        if not merged_comp.empty:
+        # Wyliczenie przelicznika U / GJ
+        df_audit = df_filtered.copy()
+        df_audit["u_per_gj"] = df_audit.apply(
+            lambda r: (r["delta_units"] / r["delta_gj"]) if r["delta_gj"] > 0 else 0.0, axis=1
+        )
+        
+        col_aud1, col_aud2 = st.columns([2, 1])
+        
+        with col_aud1:
+            st.markdown("#### Przelicznik: Ile Jednostek U przypada na 1 GJ Ciepła?")
+            fig_ratio = px.line(
+                df_audit, x="period_label", y="u_per_gj", color="season", markers=True,
+                title="Stałość współczynnika oddawania ciepła (U / GJ)",
+                labels={"u_per_gj": "Stosunek U / GJ", "period_label": "Okres"}
+            )
+            fig_ratio.update_layout(template="plotly_white")
+            st.plotly_chart(fig_ratio, use_container_width=True)
+            
+        with col_aud2:
+            st.markdown("#### Weryfikacja Anomalii")
+            anomalies = []
+            
+            # Sprawdzanie nieciągłości stanów GJ
+            for season_name in SEASONS:
+                sdf = df_audit[df_audit["season"] == season_name].sort_values("period_order")
+                if len(sdf) > 1:
+                    for i in range(len(sdf) - 1):
+                        row_curr = sdf.iloc[i]
+                        row_next = sdf.iloc[i+1]
+                        if row_curr["gj_end"] > 0 and row_next["gj_start"] > 0:
+                            if abs(row_curr["gj_end"] - row_next["gj_start"]) > 0.01:
+                                anomalies.append(
+                                    f"⚠️ Nieciągłość GJ w {season_name}: {row_curr['period_code']} koniec ({row_curr['gj_end']:.2f}) != {row_next['period_code']} początek ({row_next['gj_start']:.2f})"
+                                )
+            
+            # Sprawdzanie wpisów z brakiem GJ lub brakiem U
+            zero_gj = df_audit[(df_audit["delta_units"] > 0) & (df_audit["delta_gj"] == 0)]
+            if not zero_gj.empty:
+                for _, r in zero_gj.iterrows():
+                    anomalies.append(f"ℹ️ {r['season']} ({r['period_code']}): Podano jednostki ΔU={r['delta_units']:.0f}, ale brak odczytu GJ.")
+            
+            if anomalies:
+                for an in anomalies:
+                    st.warning(an)
+            else:
+                st.success("✅ Brak krytycznych niezgodności. Odczyty GJ są ciągłe i spójne!")
+                
+        st.markdown("#### Tabela Audytowa Odczytów Licznika GJ")
+        audit_display = df_audit[[
+            "season", "period_label", "gj_start", "gj_end", "delta_gj", 
+            "delta_units", "u_per_gj", "hdd", "sgi_gj"
+        ]].copy()
+        audit_display.columns = [
+            "Sezon", "Okres", "GJ Start", "GJ Koniec", "ΔGJ", 
+            "ΔJednostki (U)", "Przelicznik (U/GJ)", "HDD", "SGI (GJ/HDD)"
+        ]
+        st.dataframe(audit_display.style.format({
+            "GJ Start": "{:.2f}", "GJ Koniec": "{:.2f}", "ΔGJ": "{:.2f}",
+            "ΔJednostki (U)": "{:.1f}", "Przelicznik (U/GJ)": "{:.2f}",
+            "HDD": "{:.1f}", "SGI (GJ/HDD)": "{:.5f}"
+        }), use_container_width=True)
+
+    with tab3:
+        st.subheader("Ile energii i PLN zużyłbyś bez termostatów Sonoff?")
+        st.caption("Symulacja zużycia GJ oraz koszcie w PLN na podstawie bazowego wskaźnika SGI przy obecnych stopniodniach HDD.")
+        
+        if not merged_comp.empty and "expected_gj" in merged_comp.columns:
+            merged_comp["expected_cost_pln"] = merged_comp["expected_gj"] * avg_cost_gj
+            merged_comp["actual_cost_pln"] = merged_comp["delta_gj_sonoff"] * avg_cost_gj
+            
             fig_exp = go.Figure()
-            
             fig_exp.add_trace(go.Bar(
-                x=merged_comp["period_label_sonoff"],
-                y=merged_comp["expected_units"],
-                name="Gdyby NIE było Sonoff (Oczekiwane)",
-                marker_color="#e67e22"
+                x=merged_comp["period_label_sonoff"], y=merged_comp["expected_cost_pln"],
+                name="Gdyby NIE było Sonoff (Koszt Oczekiwany)", marker_color="#e67e22"
             ))
-            
             fig_exp.add_trace(go.Bar(
-                x=merged_comp["period_label_sonoff"],
-                y=merged_comp["delta_units_sonoff"],
-                name="Rzeczywiste Zużycie (Sonoff)",
-                marker_color="#27ae60"
+                x=merged_comp["period_label_sonoff"], y=merged_comp["actual_cost_pln"],
+                name="Rzeczywisty Koszt (Sonoff)", marker_color="#27ae60"
             ))
-            
             fig_exp.update_layout(
-                barmode='group',
-                xaxis_title="Okres Rozliczeniowy",
-                yaxis_title="Jednostki z Podzielnika [U]",
-                template="plotly_white"
+                barmode='group', xaxis_title="Okres", yaxis_title="Koszt Ogrzewania [PLN]", template="plotly_white"
             )
             st.plotly_chart(fig_exp, use_container_width=True)
             
-            st.markdown("#### Szagółowe Wyliczenie per Okres")
+            st.markdown("#### Wyliczenie Oszczędności w GJ i PLN per Okres")
             disp_savings = merged_comp[[
-                "period_label_sonoff", "hdd_sonoff", "delta_units_sonoff", 
-                "expected_units", "units_saved"
+                "period_label_sonoff", "hdd_sonoff", "delta_gj_sonoff", 
+                "expected_gj", "gj_saved", "expected_cost_pln", "actual_cost_pln"
             ]].copy()
+            disp_savings["pln_saved"] = disp_savings["expected_cost_pln"] - disp_savings["actual_cost_pln"]
             disp_savings.columns = [
-                "Okres", "HDD (Pogoda)", "Zużycie Sonoff [U]", 
-                "Zużycie Oczekiwane [U]", "Zaoszczędzono [U]"
+                "Okres", "HDD", "Zużycie Sonoff [GJ]", 
+                "Zużycie Oczekiwane [GJ]", "Zaoszczędzono [GJ]",
+                "Koszt Oczekiwany [PLN]", "Koszt Sonoff [PLN]", "Zaoszczędzono [PLN]"
             ]
-            disp_savings["Oszczędność %"] = (disp_savings["Zaoszczędzono [U]"] / disp_savings["Zużycie Oczekiwane [U]"]) * 100
             st.dataframe(disp_savings.style.format({
-                "HDD (Pogoda)": "{:.1f}",
-                "Zużycie Sonoff [U]": "{:.1f}",
-                "Zużycie Oczekiwane [U]": "{:.1f}",
-                "Zaoszczędzono [U]": "{:+.1f}",
-                "Oszczędność %": "{:+.1f}%"
+                "HDD": "{:.1f}", "Zużycie Sonoff [GJ]": "{:.2f}",
+                "Zużycie Oczekiwane [GJ]": "{:.2f}", "Zaoszczędzono [GJ]": "{:+.2f}",
+                "Koszt Oczekiwany [PLN]": "{:.2f} zł", "Koszt Sonoff [PLN]": "{:.2f} zł",
+                "Zaoszczędzono [PLN]": "{:+.2f} zł"
             }), use_container_width=True)
         else:
-            st.warning("Brak pokrywających się okresów między sezonem bazowym a obecnym.")
-
-    with tab3:
-        st.subheader("Wpływ Pogody (HDD) na Zużycie")
-        fig_scatter = px.scatter(
-            df_filtered, 
-            x="hdd", 
-            y="delta_units", 
-            color="season",
-            text="period_code",
-            trendline="ols",
-            labels={"hdd": "HDD (Suma Stopniodni)", "delta_units": "Zużyte Jednostki (ΔU)"},
-            title="Wykres Regresji: Łagodniejsze nachylenie linii Sonoff oznacza większą oszczędność"
-        )
-        fig_scatter.update_traces(marker=dict(size=12))
-        st.plotly_chart(fig_scatter, use_container_width=True)
+            st.warning("Brak wystarczających danych do przeprowadzenia porównania okresów.")
 
     with tab4:
+        st.subheader("Wpływ Pogody (HDD) na Zużycie GJ i Jednostek")
+        col_reg1, col_reg2 = st.columns(2)
+        
+        with col_reg1:
+            fig_scat_u = px.scatter(
+                df_filtered, x="hdd", y="delta_units", color="season", text="period_code", trendline="ols",
+                labels={"hdd": "HDD (Suma Stopniodni)", "delta_units": "Jednostki U (ΔU)"},
+                title="Regresja: Jednostki U vs HDD"
+            )
+            fig_scat_u.update_traces(marker=dict(size=10))
+            st.plotly_chart(fig_scat_u, use_container_width=True)
+
+        with col_reg2:
+            fig_scat_gj = px.scatter(
+                df_filtered[df_filtered["delta_gj"] > 0], x="hdd", y="delta_gj", color="season", text="period_code", trendline="ols",
+                labels={"hdd": "HDD (Suma Stopniodni)", "delta_gj": "Energia w GJ (ΔGJ)"},
+                title="Regresja: Zużycie Ciepła w GJ vs HDD"
+            )
+            fig_scat_gj.update_traces(marker=dict(size=10))
+            st.plotly_chart(fig_scat_gj, use_container_width=True)
+
+    with tab5:
         st.subheader("Wszystkie Wpisy w Bazie Danych")
         st.dataframe(df_filtered.sort_values(by=["season", "period_order"]), use_container_width=True)
         
