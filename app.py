@@ -259,7 +259,6 @@ df = load_data()
 if "selected_room" not in st.session_state:
     st.session_state["selected_room"] = "Salon"
 
-# Nagłówek z dynamicznym wskaźnikiem statusu
 head_col1, head_col2 = st.columns([3, 1])
 with head_col1:
     st.title("🔥 Sonoff Heating Analytics")
@@ -269,7 +268,6 @@ with head_col2:
                 '<div class="status-badge"><div class="status-dot"></div>Sonoff System Active</div>'
                 '</div>', unsafe_allow_html=True)
 
-# Kafelki wyboru pokoju (Dynamic Segmented Control)
 st.markdown("##### 📍 Wybierz Pomieszczenie")
 room_cols = st.columns(len(ROOMS_CONFIG))
 for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
@@ -292,7 +290,6 @@ with st.sidebar:
     season_input = st.selectbox("Sezon grzewczy", SEASONS, index=1)
     period_code_input = st.selectbox("Okres rozliczeniowy", list(PERIODS.keys()), format_func=lambda x: PERIODS[x])
     
-    # Auto-fetch poprzednich wartości końcowych
     prev_entries = df[(df["room_name"] == current_room) & (df["season"] == season_input)]
     default_start_u = float(prev_entries.iloc[-1]["units_end"]) if not prev_entries.empty and pd.notna(prev_entries.iloc[-1]["units_end"]) else 0.0
     default_start_gj = float(prev_entries.iloc[-1]["gj_end"]) if not prev_entries.empty and pd.notna(prev_entries.iloc[-1]["gj_end"]) else 0.0
@@ -361,13 +358,12 @@ df_room = df[df["room_name"] == current_room].sort_values("period_order")
 base_df = df_room[df_room["season"] == "2025/2026 (Bazowy)"]
 sonoff_df = df_room[df_room["season"] == "2026/2027 (Sonoff od 09.2026)"]
 
-# Porównanie "Jabłko do Jabłka" (tylko zarejestrowane minione okresy)
 recorded_periods = sonoff_df["period_code"].unique()
 base_comparable = base_df[base_df["period_code"].isin(recorded_periods)]
 
 u_sonoff_total = sonoff_df["delta_units"].sum()
 u_base_comparable = base_comparable["delta_units"].sum()
-u_diff = u_base_comparable - u_sonoff_total  # Dodatnie = oszczędność
+u_diff = u_base_comparable - u_sonoff_total
 
 est_pln_per_unit = 2.45
 pln_balance = u_diff * est_pln_per_unit
@@ -392,14 +388,13 @@ if len(recorded_periods) > 0:
             f"""<div class="loss-card">
             ⚠️ <b>PROGNOZOWANA DOPŁATA / STRATA: {pln_balance:.2f} PLN</b><br>
             W dotychczasowych okresach zużyto o <b>{abs(u_diff):.0f} U więcej</b> niż w zeszłym roku.
-            Zużycie wzrosło o <b>{((abs(u_diff) / u_base_comparable)*100 if u_base_comparable > 0 else 0):.1f}%</b>. Zeryfikuj nastawy Sonoff.
+            Zużycie wzrosło o <b>{((abs(u_diff) / u_base_comparable)*100 if u_base_comparable > 0 else 0):.1f}%</b>. Zweryfikuj nastawy Sonoff.
             </div>""",
             unsafe_allow_html=True
         )
 else:
     st.info("Brak wpisów w sezonie 2026/2027. Wprowadź pierwszy odczyt wrześniowy w panelu bocznym.")
 
-# Rząd Metryk
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Zużycie Sonoff 2026", f"{u_sonoff_total:.0f} U")
 c2.metric("Poprzedni Sezon (Ten sam okres)", f"{u_base_comparable:.0f} U")
@@ -461,7 +456,6 @@ with tab_pacing:
     fig_cum.update_layout(template="plotly_white", margin=dict(l=20, r=20, t=20, b=20))
     st.plotly_chart(fig_cum, use_container_width=True)
 
-    # Wskaźnik Prognozy
     if len(recorded_periods) > 0 and len(base_df) > 0:
         total_base_full = base_df["delta_units"].sum()
         ratio = (u_sonoff_total / u_base_comparable) if u_base_comparable > 0 else 1.0
@@ -474,15 +468,31 @@ with tab_pacing:
         p_col2.metric("Prognozowana Oszczędność / Dopłata", f"{projected_sav_pln:+.2f} PLN")
 
 with tab_advisor:
-    st.markdown("#### 💡 Rekomendacje Optymalizacyjne Sonoff")
+    st.markdown("#### 💡 Rekomendacje Optymalizacyjne Sonoff & Optymalny Harmonogram")
+    
+    st.markdown("""
+    <div class="ios-card">
+    <b>🏛️ Zasada Bezwładności Termicznej Budynku</b><br>
+    Utrzymanie progu <b>18.5°C</b> jako dolnej granicy pozwala zachować stabilność strukturalną – głowice <b>Sonoff TRVZB</b> jedynie korygują małe wahania temperatury, zamiast za każdym razem walczyć z wychłodzonym betonem stropu.
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Tabela zoptymalizowanego zestawienia
+    schedule_data = [
+        {"Strefa": "Przedpokój & Łazienka", "Stan normalny / Komfort": "Stała „4” (~21°C)", "Stan oszczędny": "Brak obniżeń (24/7)", "Dlaczego nie niżej?": "Działają jako stała tarcza termiczna dla całego mieszkania, ogrzewając strefę centralną od dołu i środka."},
+        {"Strefa": "Salon (ściana z suszarnią)", "Stan normalny / Komfort": "20.5°C", "Stan oszczędny": "18.5°C", "Dlaczego nie niżej?": "Granica, poniżej której ściana z suszarnią i strop zaczynają oddawać zbyt dużo energii na zewnątrz."},
+        {"Strefa": "Sypialnia / Pokój Dzieci", "Stan normalny / Komfort": "21.0°C", "Stan oszczędny": "18.5°C / 19.0°C (noc)", "Dlaczego nie niżej?": "Pustka pod dachem najmocniej daje o sobie znać w nocy; wyższa baza zapobiega wychłodzeniu głowy i sufitu."},
+        {"Strefa": "Mały Pokój", "Stan normalny / Komfort": "20.5°C", "Stan oszczędny": "18.5°C", "Dlaczego nie niżej?": "Płytkie obniżenie utrzymuje stabilność termiczną konstrukcji."}
+    ]
+    st.dataframe(pd.DataFrame(schedule_data), use_container_width=True, hide_index=True)
     
     adv_col1, adv_col2 = st.columns(2)
     with adv_col1:
         st.markdown("""
         <div class="ios-card">
         <b>🌡️ Nastawy Temperatury</b><br>
-        • <b>Sypialnia:</b> Zalecana temperatura nocna to 18.5°C – 19.5°C. Obniżenie o 1°C to około 6% oszczędności ciepła.<br>
-        • <b>Salon:</b> Utrzymuj 20.5°C – 21.0°C podczas obecności domowników i 18.5°C w trybie pracy/poza domem.
+        • <b>Sypialnia:</b> Zalecana temperatura nocna to 18.5°C – 19.0°C. Obniżenie o 1°C to około 6% oszczędności ciepła.<br>
+        • <b>Salon:</b> Utrzymuj 20.5°C podczas obecności domowników i 18.5°C w trybie ekologicznym.
         </div>
         """, unsafe_allow_html=True)
     with adv_col2:
