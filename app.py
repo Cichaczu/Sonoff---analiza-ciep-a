@@ -6,8 +6,8 @@ import urllib.parse
 from github import Github, GithubException
 import numpy as np
 import pandas as pd
-import Plotly.express as px
-import Plotly.graph_objects as px_go
+import plotly.express as px
+import plotly.graph_objects as px_go
 import requests
 from sklearn.linear_model import LinearRegression
 import streamlit as st
