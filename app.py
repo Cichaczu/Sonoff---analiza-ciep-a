@@ -8,7 +8,7 @@ import os
 from datetime import date
 
 # ---------------------------------------------------------
-# KONFIGURACJA STRONY
+# KONFIGURACJA STRONY STREAMLIT
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Analiza Oszczędności Ogrzewania - Sonoff",
@@ -19,17 +19,24 @@ st.set_page_config(
 FILE_PATH = "data/consumption.csv"
 
 # ---------------------------------------------------------
-# OBSŁUGA GITHUB / OBSŁUGA PLIKÓW
+# OBSŁUGA BAZY DANYCH I INTEGRACJA Z GITHUB
 # ---------------------------------------------------------
 def get_github_repo():
-    token = st.secrets.get("github", {}).get("token")
-    repo_name = st.secrets.get("github", {}).get("repo")
-    if token and repo_name:
-        g = Github(token)
-        return g.get_repo(repo_name)
+    """Bezpieczne pobieranie repozytorium z GitHub z obsługą błędów."""
+    try:
+        github_config = st.secrets.get("github", {})
+        token = github_config.get("token")
+        repo_name = github_config.get("repo")
+        
+        if token and repo_name and len(token.strip()) > 0 and len(repo_name.strip()) > 0:
+            g = Github(token)
+            return g.get_repo(repo_name)
+    except Exception:
+        return None
     return None
 
 def create_empty_df():
+    """Tworzenie pustej struktury DataFrame."""
     return pd.DataFrame(columns=[
         "id", "season", "period_code", "period_label", "date_entry",
         "room_name", "units_start", "units_end", "delta_units",
@@ -37,6 +44,7 @@ def create_empty_df():
     ])
 
 def load_data():
+    """Ładowanie danych z GitHub lub lokalnego pliku fallback."""
     repo = get_github_repo()
     branch = st.secrets.get("github", {}).get("branch", "main")
     
@@ -44,27 +52,35 @@ def load_data():
         try:
             file_content = repo.get_contents(FILE_PATH, ref=branch)
             csv_raw = file_content.decoded_content.decode('utf-8')
-            df = pd.read_csv(io.StringIO(csv_raw))
-            return df
+            return pd.read_csv(io.StringIO(csv_raw))
         except GithubException as e:
             if e.status == 404:
                 df = create_empty_df()
-                save_data(df, commit_message="Inicjalizacja pliku baza danych")
+                save_data(df, commit_message="Inicjalizacja pliku data/consumption.csv")
                 return df
             else:
-                st.error(f"Błąd pobierania danych z GitHub: {e}")
-                return create_empty_df()
+                st.warning(f"Brak dostępu do GitHub (Kod HTTP {e.status}). Przełączono w tryb lokalny.")
+                return load_local_fallback()
+        except Exception:
+            return load_local_fallback()
     else:
-        # Tryb lokalny (fallback)
-        if os.path.exists(FILE_PATH):
-            return pd.read_csv(FILE_PATH)
-        else:
-            df = create_empty_df()
-            os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
-            df.to_csv(FILE_PATH, index=False)
-            return df
+        return load_local_fallback()
 
-def save_data(df, commit_message="Aktualizacja danych zużycia"):
+def load_local_fallback():
+    """Wczytywanie z lokalnego pliku na dysku."""
+    if os.path.exists(FILE_PATH):
+        try:
+            return pd.read_csv(FILE_PATH)
+        except Exception:
+            return create_empty_df()
+    else:
+        df = create_empty_df()
+        os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
+        df.to_csv(FILE_PATH, index=False)
+        return df
+
+def save_data(df, commit_message="Aktualizacja odczytów zużycia ciepła"):
+    """Zapisywanie danych do GitHub (auto-commit) lub na dysk lokalny."""
     repo = get_github_repo()
     branch = st.secrets.get("github", {}).get("branch", "main")
     
@@ -95,23 +111,17 @@ def save_data(df, commit_message="Aktualizacja danych zużycia"):
                     raise e
             return True
         except Exception as e:
-            st.error(f"Nie udało się zapisać danych do GitHub: {e}")
+            st.error(f"Nie udało się zapisać danych na GitHubie: {e}")
             return False
     else:
         os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
         df.to_csv(FILE_PATH, index=False)
-        st.warning("Zapisano lokalnie (brak skonfigurowanego tokena GitHub Secrets).")
+        st.info("Zapisano lokalnie (brak aktywnej konfiguracji GitHub Secrets).")
         return True
 
 # ---------------------------------------------------------
-# INTERFEJS UŻYTKOWNIKA & FORMULARZ
+# SŁOWNIKI I STAŁE
 # ---------------------------------------------------------
-st.title("🔥 Monitor Efektywności Termostatów Sonoff")
-st.caption("Aplikacja porównuje zużycie energii z podzielników po normalizacji pogodowej wskaźnikiem HDD (Heating Degree Days).")
-
-df = load_data()
-
-# Słownik okresów dwutygodniowych
 PERIODS = {
     "10-1": "Październik I (1-15)",
     "10-2": "Październik II (16-31)",
@@ -132,6 +142,14 @@ PERIODS = {
 SEASONS = ["2024/2025 (Bazowy)", "2025/2026 (Sonoff)"]
 ROOMS = ["Suma Całkowita", "Salon", "Sypialnia", "Kuchnia", "Pokój Dziecka"]
 
+# ---------------------------------------------------------
+# INTERFEJS UŻYTKOWNIKA & FORMULARZ
+# ---------------------------------------------------------
+st.title("🔥 Monitor Efektywności Termostatów Sonoff")
+st.caption("Aplikacja porównuje zużycie energii z podzielników po normalizacji pogodowej wskaźnikiem HDD (Heating Degree Days).")
+
+df = load_data()
+
 with st.sidebar:
     st.header("📥 Wprowadź Odczyt")
     with st.form("entry_form", clear_on_submit=False):
@@ -139,24 +157,24 @@ with st.sidebar:
         period_code = st.selectbox("Okres (2 razy w miesiącu)", list(PERIODS.keys()), format_func=lambda x: PERIODS[x])
         room_name = st.selectbox("Pomieszczenie / Licznik", ROOMS)
         
+        st.markdown("---")
         st.subheader("Odczyty z Podzielnika")
         col_u1, col_u2 = st.columns(2)
         units_start = col_u1.number_input("Stan początkowy", min_value=0.0, value=0.0, step=1.0)
         units_end = col_u2.number_input("Stan końcowy", min_value=0.0, value=0.0, step=1.0)
         
-        manual_delta = st.number_input("Lub wpisz bezpośrednio zużycie (ΔU)", min_value=0.0, value=0.0, step=1.0,
-                                       help="Wpisz tutaj, jeśli podajesz wyliczoną różnicę bez podawania stanu początkowego i końcowego.")
+        manual_delta = st.number_input("Lub wpisz bezpośrednio różnicę (ΔU)", min_value=0.0, value=0.0, step=1.0,
+                                       help="Użyj tego pola, jeśli podajesz wyliczone zużycie bez wpisywania stanu początkowego i końcowego.")
         
         hdd_input = st.number_input("Liczba Stopniodni (HDD)", min_value=0.1, value=150.0, step=0.1,
-                                    help="Suma HDD dla danej lokalizacji z ostatnich 2 tygodni.")
+                                    help="Suma HDD dla Twojego miasta dla ostatnich 2 tygodni.")
         
         date_entry = st.date_input("Data wpisu", date.today())
-        notes = st.text_input("Uwagi / Nastawy Sonoff", value="")
+        notes = st.text_input("Uwagi / Nastawy harmonogramu", value="")
         
-        submitted = st.form_submit_button("💾 Zapisz do Bazy GitHub")
+        submitted = st.form_submit_button("💾 Zapisz Odczyt")
         
         if submitted:
-            # Obliczenie zużycia
             if (units_end > units_start) and (manual_delta == 0):
                 delta_units = units_end - units_start
             else:
@@ -168,12 +186,15 @@ with st.sidebar:
                 sgi = round(delta_units / hdd_input, 4)
                 
                 # Usuń istniejący wpis dla tego samego okresu, pomieszczenia i sezonu (nadpisywanie)
-                df = df[~((df["season"] == season) & 
-                          (df["period_code"] == period_code) & 
-                          (df["room_name"] == room_name))]
+                if not df.empty and all(col in df.columns for col in ["season", "period_code", "room_name"]):
+                    df = df[~((df["season"] == season) & 
+                              (df["period_code"] == period_code) & 
+                              (df["room_name"] == room_name))]
+                
+                next_id = int(df["id"].max() + 1) if not df.empty and "id" in df.columns and pd.notna(df["id"].max()) else 1
                 
                 new_row = pd.DataFrame([{
-                    "id": len(df) + 1,
+                    "id": next_id,
                     "season": season,
                     "period_code": period_code,
                     "period_label": PERIODS[period_code],
@@ -189,19 +210,21 @@ with st.sidebar:
                 
                 df = pd.concat([df, new_row], ignore_index=True)
                 if save_data(df, commit_message=f"Dodano odczyt: {season} - {PERIODS[period_code]} ({room_name})"):
-                    st.success("Wpis został pomyślnie zapisany w GitHub!")
+                    st.success("Wpis został zapisany!")
                     st.rerun()
 
 # ---------------------------------------------------------
 # ANALIZA I WIZUALIZACJE
 # ---------------------------------------------------------
-if df.empty:
-    st.info("👋 Baza danych jest obecnie pusta. Wprowadź odczyty w panelu bocznym lub wgraj plik z danymi z zeszłego sezonu.")
+if df.empty or len(df) == 0:
+    st.info("👋 Baza danych jest obecnie pusta. Wprowadź pierwsze odczyty w panelu bocznym.")
 else:
-    selected_room = st.selectbox("🔍 Wybierz obszar do analizy:", df["room_name"].unique())
+    available_rooms = df["room_name"].unique() if "room_name" in df.columns else ROOMS
+    selected_room = st.selectbox("🔍 Wybierz obszar do analizy:", available_rooms)
+    
     df_filtered = df[df["room_name"] == selected_room].copy()
     
-    # Sortowanie po okresie
+    # Sortowanie po kolejności okresów
     period_order = list(PERIODS.keys())
     df_filtered["period_order"] = df_filtered["period_code"].map(lambda x: period_order.index(x) if x in period_order else 99)
     df_filtered = df_filtered.sort_values("period_order")
@@ -221,7 +244,7 @@ else:
     else:
         pct_savings = 0.0
 
-    # Obliczenie oszczędności w jednostkach (Oczekiwane vs Rzeczywiste)
+    # Łączenie okresów do porównania
     merged_comp = pd.merge(
         sonoff_df, base_df, 
         on="period_code", 
@@ -229,7 +252,6 @@ else:
     )
     
     if not merged_comp.empty:
-        # Oczekiwane zużycie = SGI zeszłoroczne * obecne HDD
         merged_comp["expected_units"] = merged_comp["sgi_base"] * merged_comp["hdd_sonoff"]
         merged_comp["units_saved"] = merged_comp["expected_units"] - merged_comp["delta_units_sonoff"]
         total_units_saved = merged_comp["units_saved"].sum()
@@ -243,32 +265,32 @@ else:
     col2.metric(
         "Średnie SGI (Sonoff 25/26)", 
         f"{avg_sgi_sonoff:.4f} u/HDD" if avg_sgi_sonoff else "Brak danych",
-        delta=f"{-pct_savings:.1f}% (Efektywność)" if pct_savings != 0 else None,
+        delta=f"{pct_savings:+.1f}% (Oszczędność)" if pct_savings != 0 else None,
         delta_color="normal" if pct_savings >= 0 else "inverse"
     )
     col3.metric(
-        "Realne Zaoszczędzone Jednostki", 
+        "Zaoszczędzone Jednostki (Suma)", 
         f"{total_units_saved:+.1f} u",
-        help="Liczba jednostek z podzielnika, które zaoszczędzono względem pogody z br."
+        help="Liczba jednostek z podzielnika zaoszczędzona po uwzględnieniu warunków pogodowych."
     )
     col4.metric(
-        "Liczba Porównywanych Okresów", 
-        f"{len(merged_comp)} z {len(sonoff_df)}"
+        "Porównane Okresy", 
+        f"{len(merged_comp)} okresów"
     )
 
     st.divider()
 
     # --- TABY Z WYKRESAMI ---
     tab1, tab2, tab3, tab4 = st.tabs([
-        "📈 Porównanie SGI (Efektywność)", 
-        "🛡️ Zużycie Rzeczywiste vs Oczekiwane", 
-        "🌡️ Zużycie Surowe vs HDD", 
-        "📋 Tabela i Zarządzanie Danyi"
+        "📈 Efektywność SGI", 
+        "🛡️ Rzeczywiste vs Oczekiwane", 
+        "🌡️ Regresja: Zużycie vs HDD", 
+        "📋 Tabela i ZARZĄDZANIE"
     ])
 
     with tab1:
         st.subheader("Wskaźnik Jednostkowy SGI (Zużycie ÷ HDD)")
-        st.caption("SGI eliminuje wpływ pogody. Mniejsza wartość oznacza, że termostaty Sonoff zużywają mniej energii przy tej samej temperaturze zewnętrznej.")
+        st.caption("SGI eliminuje wpływ pogody. Niższy słupka oznacza wyższą efektywność ogrzewania.")
         
         fig_sgi = go.Figure()
         
@@ -303,7 +325,7 @@ else:
 
     with tab2:
         st.subheader("Ile jednostek zużyłbyś bez termostatów Sonoff?")
-        st.caption("Wykres symuluje zużycie przy obecnej pogodzie (HDD), gdyby ogrzewanie działało ze starą efektywnością.")
+        st.caption("Symulacja zużycia przy tegorocznej pogodzie (HDD), gdyby ogrzewanie działało bez automatyzacji.")
         
         if not merged_comp.empty:
             fig_exp = go.Figure()
@@ -330,8 +352,7 @@ else:
             )
             st.plotly_chart(fig_exp, use_container_width=True)
             
-            # Podsumowanie oszczędności w tabeli
-            st.markdown("#### Wyliczenie Oszczędności per Okres")
+            st.markdown("#### Szagółowe Wyliczenie per Okres")
             disp_savings = merged_comp[[
                 "period_label_sonoff", "hdd_sonoff", "delta_units_sonoff", 
                 "expected_units", "units_saved"
@@ -352,7 +373,7 @@ else:
             st.warning("Brak pokrywających się okresów między sezonem bazowym a obecnym.")
 
     with tab3:
-        st.subheader("Wpływ Dotkliwości Zimy (HDD) na Zużycie Jednostek")
+        st.subheader("Wpływ Pogody (HDD) na Zużycie")
         fig_scatter = px.scatter(
             df_filtered, 
             x="hdd", 
@@ -361,23 +382,23 @@ else:
             text="period_code",
             trendline="ols",
             labels={"hdd": "HDD (Suma Stopniodni)", "delta_units": "Zużyte Jednostki (ΔU)"},
-            title="Prosta Regresji: Im bardziej płaska prosta Sonoff, tym wyższa izolacja/oszczędność"
+            title="Wykres Regresji: Łagodniejsze nachylenie linii Sonoff oznacza większą oszczędność"
         )
         fig_scatter.update_traces(marker=dict(size=12))
         st.plotly_chart(fig_scatter, use_container_width=True)
 
     with tab4:
-        st.subheader("Pełna Baza Danych (Bieżące Odczyty)")
+        st.subheader("Wszystkie Wpisy w Bazie Danych")
         st.dataframe(df_filtered.sort_values(by=["season", "period_order"]), use_container_width=True)
         
         st.divider()
         st.subheader("🗑️ Usuwanie Wpisu")
         del_id = st.number_input("Podaj ID wpisu do usunięcia:", min_value=1, step=1)
-        if st.button("Usuń wpis z bazy GitHub"):
+        if st.button("Usuń wpis z bazy"):
             if del_id in df["id"].values:
                 df = df[df["id"] != del_id]
                 save_data(df, commit_message=f"Usunięto wpis ID {del_id}")
-                st.success(f"Wpis o ID {del_id} został usunięty.")
+                st.success(f"Wpis ID {del_id} został usunięty.")
                 st.rerun()
             else:
                 st.error("Nie znaleziono wpisu o podanym ID.")
