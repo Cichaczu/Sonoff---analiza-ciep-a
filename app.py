@@ -7,6 +7,7 @@ import io
 import os
 from datetime import date, datetime, timedelta
 import requests
+import time
 
 # ---------------------------------------------------------
 # KONFIGURACJA STRONY I LOKALIZACJI
@@ -23,7 +24,7 @@ EST_PLN_PER_UNIT = 2.45
 
 # Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m²
 SSM_CO_MONTHLY_ADVANCE = 774.53  # 11.64 zł / m² / mc (zaliczka miesięczna)
-SSM_SEASON_MONTHS = 7            # Sezon grzewczy (np. październik - kwiecień)
+SSM_SEASON_MONTHS = 7            # Sezon grzewczy (październik - kwiecień)
 SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity budżet zaliczkowy CO na sezon (~5421.71 zł)
 
 # Współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego
@@ -134,6 +135,21 @@ st.markdown("""
         color: #007AFF;
         margin-top: 3px;
     }
+    
+    /* Fancy alert box style */
+    .fancy-alert-card {
+        background: linear-gradient(135deg, rgba(0, 122, 255, 0.1) 0%, rgba(52, 199, 89, 0.1) 100%);
+        border: 2px solid #007AFF;
+        border-radius: 20px;
+        padding: 20px 24px;
+        box-shadow: 0 10px 30px rgba(0, 122, 255, 0.2);
+        margin-bottom: 25px;
+        animation: fadeIn 0.5s ease-out;
+    }
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -233,11 +249,6 @@ def load_data():
         df = load_local_fallback()
     
     if df is not None and not df.empty:
-        mask_zero = df["period_label"].str.contains("Stan Zero", na=False)
-        if mask_zero.any():
-            df.loc[mask_zero, "units_start"] = df.loc[mask_zero, "units_end"]
-            df.loc[mask_zero, "delta_units"] = 0.0
-            df.loc[mask_zero, "delta_gj"] = 0.0
         if "temp_zewnetrzna" not in df.columns:
             df["temp_zewnetrzna"] = 12.0
         if "mode_tag" not in df.columns:
@@ -286,6 +297,14 @@ today = date.today()
 is_tuesday = (today.weekday() == 1)
 
 # ---------------------------------------------------------
+# OBSŁUGA TYMCZASOWEGO POWIADOMIENIA FANCY (5 MINUT / 300 SEKUND)
+# ---------------------------------------------------------
+if "fancy_alert" in st.session_state:
+    elapsed = time.time() - st.session_state["fancy_alert"]["timestamp"]
+    if elapsed > 300:  # 5 minut
+        del st.session_state["fancy_alert"]
+
+# ---------------------------------------------------------
 # NAWIGACJA GŁÓWNA I NAGŁÓWEK
 # ---------------------------------------------------------
 if "selected_room" not in st.session_state:
@@ -295,6 +314,19 @@ current_room = st.session_state["selected_room"]
 
 st.title("🔥 Sonoff Smart Heating - Panel Sterowania")
 st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Płynne zarządzanie i inteligentna predykcja AI w stylu iOS")
+
+# Wyświetlenie fancy powiadomienia, jeśli jest aktywne
+if "fancy_alert" in st.session_state:
+    fa = st.session_state["fancy_alert"]
+    st.markdown(f"""
+    <div class="fancy-alert-card">
+        <h3 style="margin: 0 0 8px 0; color: #007AFF;">⚡ Sukces! Nowy odczyt zapisany dla strefy: {fa['room']}</h3>
+        <p style="margin: 4px 0; font-size: 16px;"><b>Przyrost w tym tygodniu ($\Delta U$):</b> <span style="color: #34C759; font-weight: 700;">+{fa['delta']:.1f} U</span> ({fa['delta']*EST_PLN_PER_UNIT:.2f} PLN)</p>
+        <p style="margin: 4px 0; font-size: 16px;"><b>Porównanie tydzień do tygodnia:</b> <span style="color: {'#34C759' if fa['diff_vs_prev'] <= 0 else '#FF3B30'}; font-weight: 700;">{fa['diff_vs_prev']:+.1f}%</span> względem poprz. odczytu</p>
+        <p style="margin: 4px 0; font-size: 16px;"><b>Całkowity bilans strefy w sezonie:</b> <b style="color: #AF52DE;">{fa['total_room_units']:.1f} U</b> (~{fa['total_room_units']*EST_PLN_PER_UNIT:.2f} PLN)</p>
+        <p style="margin: 8px 0 0 0; font-size: 12px; color: #8E8E93;">Komunikat zniknie automatycznie za kilka minut.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 room_cols = st.columns(len(ROOMS_CONFIG))
 for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
@@ -307,27 +339,35 @@ for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
 st.divider()
 
 # ---------------------------------------------------------
-# OBLICZENIA DLA BIEŻĄCEGO POKOJU I MIESZKANIA
+# OBLICZENIA DLA BIEŻĄCEGO POKOJU I MIESZKANIA (STAŁY STAN POCZĄTKOWY ROKU)
 # ---------------------------------------------------------
 df_room = df[df["room_name"] == current_room].sort_values(by=["date_entry", "id"]) if not df.empty else pd.DataFrame()
 
-if not df_room.empty:
-    last_row = df_room.iloc[-1]
-    last_meter = last_row.get("meter_number", ROOMS_CONFIG[current_room]["meter_default"])
-    val_start = float(last_row.get("units_start", 0.0))
-    val_end = float(last_row.get("units_end", 0.0))
-    last_date = str(last_row.get("date_entry", "Brak odczytów"))
-    last_delta = float(last_row.get("delta_units", 0.0))
-    total_delta_room = df_room[df_room["season"] == "2026/2027 (Sonoff - Wtorki)"]["delta_units"].sum()
+# Wyznaczenie stałego stanu początkowego dla danej strefy (najwcześniejszy wpis sezonu sonoff lub bazowy)
+df_room_sonoff = df_room[df_room["season"].str.contains("Sonoff", na=False)] if not df_room.empty else pd.DataFrame()
+if not df_room_sonoff.empty:
+    val_start = float(df_room_sonoff.iloc[0]["units_start"])
+    last_row = df_room_sonoff.iloc[-1]
+    val_end = float(last_row.get("units_end", val_start))
+    last_meter = str(last_row.get("meter_number", ROOMS_CONFIG[current_room]["meter_default"]))
+    last_date = str(last_row.get("date_entry", "Brak"))
+    total_delta_room = df_room_sonoff["delta_units"].sum()
 else:
-    last_meter = ROOMS_CONFIG[current_room]["meter_default"]
     val_start = 110.4 if current_room == "Pokój Dziecka" else (126.7 if current_room == "Sypialnia" else 0.0)
     val_end = val_start
+    last_meter = ROOMS_CONFIG[current_room]["meter_default"]
     last_date = "Brak odczytów"
-    last_delta = 0.0
     total_delta_room = 0.0
 
+last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty else 0.0
 live_outdoor_temp = get_outdoor_temp()
+
+# Jeśli wybrany jest "Licznik Główny", zsumuj przyrosty ze wszystkich regularnych stref (Salon, Sypialnia, Pokój Dziecka)
+if current_room == "Licznik Główny":
+    df_sonoff_all_rooms = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")]
+    total_delta_room = df_sonoff_all_rooms["delta_units"].sum() if not df_sonoff_all_rooms.empty else 0.0
+    val_start = 0.0
+    val_end = total_delta_room
 
 # Obliczenia dla całego mieszkania (Sezon Sonoff)
 df_sonoff_all = df[df["season"].str.contains("Sonoff", na=False)] if not df.empty else pd.DataFrame()
@@ -356,8 +396,8 @@ if is_tuesday:
             
             with st.form("auto_tuesday_modal_form"):
                 m_input = st.text_input("Numer Podzielnika", value=last_meter)
-                u_s = st.number_input("Wartość Początkowa (Poprzedni stan końcowy)", min_value=0.0, value=val_end, step=0.1)
-                u_e = st.number_input("Wartość Końcowa (Z dzisiejszego wtorku)", min_value=0.0, value=val_end + 1.0, step=0.1)
+                u_s = st.number_input("Stały Stan Początkowy Sezonu", min_value=0.0, value=val_start, disabled=True)
+                u_e = st.number_input("Wartość Końcowa (Z dzisiejszego wtorku)", min_value=0.0, value=max(val_end, val_start), step=0.1)
                 m_tag = st.selectbox("Tryb pracy grzania", MODES, index=0)
                 
                 col_g1, col_g2 = st.columns(2)
@@ -369,11 +409,15 @@ if is_tuesday:
                 modal_notes = st.text_input("Uwagi / Nastawa", value="Wtorkowa synchronizacja automatyczna")
 
                 if st.form_submit_button("⚡ Zapisz i zsynchronizuj aplikację", use_container_width=True):
-                    delta_u_m = u_e - u_s
+                    # Przyrost to wartość końcowa minus stały stan początkowy (lub delta względem poprzedniego odczytu)
+                    prev_val_end = val_end if not df_room_sonoff.empty else val_start
+                    delta_u_m = u_e - prev_val_end
+                    if delta_u_m < 0:
+                        delta_u_m = 0.0
                     delta_g_m = gj_e_m - gj_s_m if gj_e_m > gj_s_m else 0.0
 
-                    if delta_u_m < 0:
-                        st.error("Wartość końcowa nie może być mniejsza od początkowej!")
+                    if u_e < prev_val_end:
+                        st.error("Wartość końcowa nie może być mniejsza od poprzedniego stanu licznika!")
                     else:
                         next_id = int(df["id"].max() + 1) if not df.empty and pd.notna(df["id"].max()) else 1
                         new_row_modal = pd.DataFrame([{
@@ -384,7 +428,7 @@ if is_tuesday:
                             "date_entry": str(today),
                             "room_name": current_room,
                             "meter_number": m_input,
-                            "units_start": u_s,
+                            "units_start": prev_val_end,
                             "units_end": u_e,
                             "delta_units": delta_u_m,
                             "gj_start": gj_s_m,
@@ -397,6 +441,18 @@ if is_tuesday:
 
                         df = pd.concat([df, new_row_modal], ignore_index=True)
                         if save_data(df, commit_message=f"Automatyczny odczyt wtorkowy: {current_room} T{current_iso_w}"):
+                            # Oblicz różnicę względem poprzedniego wpisu
+                            prev_delta = last_delta if last_delta > 0 else 1.0
+                            diff_vs_prev = ((delta_u_m - prev_delta) / prev_delta * 100) if prev_delta > 0 else 0.0
+                            new_total_room = total_delta_room + delta_u_m
+                            
+                            st.session_state["fancy_alert"] = {
+                                "timestamp": time.time(),
+                                "room": current_room,
+                                "delta": delta_u_m,
+                                "diff_vs_prev": diff_vs_prev,
+                                "total_room_units": new_total_room
+                            }
                             st.success("Zapisano pomyślnie! Synchronizuję aplikację...")
                             st.rerun()
 
@@ -416,11 +472,11 @@ st.markdown(f"""
     </div>
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;">
         <div class="val-box">
-            <div class="val-title">Stan Początkowy</div>
+            <div class="val-title">Stały Stan Początkowy</div>
             <div class="val-num">{val_start:.1f} U</div>
         </div>
         <div class="val-box">
-            <div class="val-title">Ostatni Stan Licznika</div>
+            <div class="val-title">Aktualny Stan Licznika</div>
             <div class="val-num">{val_end:.1f} U</div>
         </div>
         <div class="val-box">
@@ -428,7 +484,7 @@ st.markdown(f"""
             <div class="val-num" style="color: #34C759;">+{last_delta:.1f} U</div>
         </div>
         <div class="val-box">
-            <div class="val-title">Suma Sezon Sonoff</div>
+            <div class="val-title">Suma Sezon Strefa</div>
             <div class="val-num" style="color: #AF52DE;">{total_delta_room:.1f} U</div>
         </div>
     </div>
@@ -499,15 +555,14 @@ with st.sidebar:
     period_tag = f"Tydzień {week_input:02d} (Wtorek)"
 
     st.info(f"📆 Domyślny Wtorek: **{tuesday_date.strftime('%d.%m.%Y')}**")
-    suggested_start = val_end
 
     with st.form("tuesday_form"):
         meter_input = st.text_input("Numer Podzielnika", value=last_meter)
         
         st.markdown("---")
         st.markdown("##### 🔢 Stan Podzielnika [U]")
-        u_start = st.number_input("Wartość Początkowa", min_value=0.0, value=suggested_start, step=0.1)
-        u_end = st.number_input("Wartość Końcowa (z Wtorku)", min_value=0.0, value=suggested_start + 1.0, step=0.1)
+        u_start = st.number_input("Stały Stan Początkowy Sezonu", min_value=0.0, value=val_start, disabled=True)
+        u_end = st.number_input("Wartość Końcowa (z Wtorku)", min_value=0.0, value=max(val_end, val_start), step=0.1)
         mode_input = st.selectbox("Tryb pracy / Tag", MODES, index=0)
         
         st.markdown("---")
@@ -519,11 +574,14 @@ with st.sidebar:
         notes = st.text_input("Nastawa / Uwagi", value="Sonoff Auto 20.5°C")
 
         if st.form_submit_button("⚡ Zapisz i Synchronizuj", use_container_width=True):
-            delta_u = u_end - u_start
+            prev_val_end = val_end if not df_room_sonoff.empty else val_start
+            delta_u = u_end - prev_val_end
+            if delta_u < 0:
+                delta_u = 0.0
             delta_g = gj_e - gj_s if gj_e > gj_s else 0.0
 
-            if delta_u < 0:
-                st.error("Wartość końcowa nie może być mniejsza od początkowej!")
+            if u_end < prev_val_end:
+                st.error("Wartość końcowa nie może być mniejsza od poprzedniego stanu licznika!")
             else:
                 next_id = int(df["id"].max() + 1) if not df.empty and pd.notna(df["id"].max()) else 1
 
@@ -535,7 +593,7 @@ with st.sidebar:
                     "date_entry": str(entry_date),
                     "room_name": current_room,
                     "meter_number": meter_input,
-                    "units_start": u_start,
+                    "units_start": prev_val_end,
                     "units_end": u_end,
                     "delta_units": delta_u,
                     "gj_start": gj_s,
@@ -548,6 +606,17 @@ with st.sidebar:
 
                 df = pd.concat([df, new_row], ignore_index=True)
                 if save_data(df, commit_message=f"Wtorkowy odczyt: {current_room} T{week_input}"):
+                    prev_delta = last_delta if last_delta > 0 else 1.0
+                    diff_vs_prev = ((delta_u - prev_delta) / prev_delta * 100) if prev_delta > 0 else 0.0
+                    new_total_room = total_delta_room + delta_u
+                    
+                    st.session_state["fancy_alert"] = {
+                        "timestamp": time.time(),
+                        "room": current_room,
+                        "delta": delta_u,
+                        "diff_vs_prev": diff_vs_prev,
+                        "total_room_units": new_total_room
+                    }
                     st.success("Zapisano i zsynchronizowano pomyślnie!")
                     st.rerun()
 
@@ -747,7 +816,7 @@ with tab_history:
 
         col_h1, col_h2 = st.columns(2)
         with col_h1:
-            if st.button("🗑️ Usuń zaznaczone wiersze z bazy", type="primary"):
+            if st.button("🗑️ Usuń zaznaczone wiersze z terytorium bazy", type="primary"):
                 rows_to_keep = edited_table[edited_table["Zaznacz"] == False]
                 rows_to_keep = rows_to_keep.drop(columns=["Zaznacz"])
                 save_data(rows_to_keep, "Usunięto wybrane wiersze z tabeli")
