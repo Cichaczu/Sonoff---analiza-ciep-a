@@ -20,7 +20,7 @@ st.set_page_config(
 FILE_PATH = "data/consumption.csv"
 
 # ---------------------------------------------------------
-# DYNAMICZNY DYSKRETNY STYL iOS 18 (ANIMACJE & HOVER EFFECTS)
+# DYNAMICZNY STYL iOS 18 (DYNAMIC ISLAND & BALANCE WIDGETS)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -61,7 +61,66 @@ st.markdown("""
         animation: pulse-green 2s infinite;
     }
 
-    /* Karty iOS 18 z efektami płynnego przejścia i podświetlenia */
+    /* iOS 18 DYNAMIC WIDGETS (Na plusie / Na minusie) */
+    .ios-balance-widget-plus {
+        background: linear-gradient(135deg, rgba(52, 199, 89, 0.18) 0%, rgba(255, 255, 255, 0.95) 100%);
+        backdrop-filter: blur(25px);
+        -webkit-backdrop-filter: blur(25px);
+        border: 2px solid #34C759;
+        border-radius: 24px;
+        padding: 20px 26px;
+        margin-bottom: 20px;
+        box-shadow: 0 10px 30px rgba(52, 199, 89, 0.15);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .ios-balance-widget-plus:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 14px 35px rgba(52, 199, 89, 0.25);
+    }
+
+    .ios-balance-widget-minus {
+        background: linear-gradient(135deg, rgba(255, 59, 48, 0.18) 0%, rgba(255, 255, 255, 0.95) 100%);
+        backdrop-filter: blur(25px);
+        -webkit-backdrop-filter: blur(25px);
+        border: 2px solid #FF3B30;
+        border-radius: 24px;
+        padding: 20px 26px;
+        margin-bottom: 20px;
+        box-shadow: 0 10px 30px rgba(255, 59, 48, 0.15);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    .ios-balance-widget-minus:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 14px 35px rgba(255, 59, 48, 0.25);
+    }
+
+    .widget-title {
+        font-size: 14px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        margin-bottom: 4px;
+    }
+    .widget-amount-plus {
+        font-size: 32px;
+        font-weight: 800;
+        color: #145A25;
+        letter-spacing: -0.5px;
+    }
+    .widget-amount-minus {
+        font-size: 32px;
+        font-weight: 800;
+        color: #D32F2F;
+        letter-spacing: -0.5px;
+    }
+    .widget-subtext {
+        font-size: 14px;
+        color: #3A3A3C;
+        margin-top: 6px;
+        font-weight: 500;
+    }
+
+    /* Karty iOS 18 */
     div[data-testid="stMetric"], .ios-card {
         background: rgba(255, 255, 255, 0.88);
         backdrop-filter: blur(25px);
@@ -79,27 +138,6 @@ st.markdown("""
         box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
         border-color: rgba(0, 122, 255, 0.4);
     }
-    
-    /* Karty Zysku / Straty */
-    .profit-card {
-        background: linear-gradient(135deg, rgba(52, 199, 89, 0.15) 0%, rgba(52, 199, 89, 0.05) 100%);
-        border: 1.5px solid #34C759;
-        border-radius: 20px;
-        padding: 18px 24px;
-        color: #145A25;
-        transition: transform 0.3s ease;
-    }
-    .profit-card:hover { transform: scale(1.01); }
-    
-    .loss-card {
-        background: linear-gradient(135deg, rgba(255, 59, 48, 0.15) 0%, rgba(255, 59, 48, 0.05) 100%);
-        border: 1.5px solid #FF3B30;
-        border-radius: 20px;
-        padding: 18px 24px;
-        color: #8B0000;
-        transition: transform 0.3s ease;
-    }
-    .loss-card:hover { transform: scale(1.01); }
 
     [data-testid="stMetricValue"] {
         font-size: 28px !important;
@@ -174,6 +212,7 @@ PERIODS = {
 }
 
 SEASONS = ["2025/2026 (Bazowy)", "2026/2027 (Sonoff od 09.2026)"]
+EST_PLN_PER_UNIT = 2.45
 
 # ---------------------------------------------------------
 # OBSŁUGA DANYCH
@@ -268,6 +307,75 @@ with head_col2:
                 '<div class="status-badge"><div class="status-dot"></div>Sonoff System Active</div>'
                 '</div>', unsafe_allow_html=True)
 
+# ---------------------------------------------------------
+# OBLICZENIA GLOBALNE I DLA WYBRANEGO POKOJU
+# ---------------------------------------------------------
+period_order = list(PERIODS.keys())
+df["period_order"] = df["period_code"].map(lambda x: period_order.index(x) if x in period_order else 99)
+
+current_room = st.session_state["selected_room"]
+df_room = df[df["room_name"] == current_room].sort_values("period_order")
+
+base_df = df_room[df_room["season"] == "2025/2026 (Bazowy)"]
+sonoff_df = df_room[df_room["season"] == "2026/2027 (Sonoff od 09.2026)"]
+
+recorded_periods = sonoff_df["period_code"].unique()
+base_comparable = base_df[base_df["period_code"].isin(recorded_periods)]
+
+u_sonoff_total = sonoff_df["delta_units"].sum()
+u_base_comparable = base_comparable["delta_units"].sum()
+u_diff = u_base_comparable - u_sonoff_total
+pln_balance = u_diff * EST_PLN_PER_UNIT
+
+# ---------------------------------------------------------
+# WIDGET EKRANOWY iOS 18: "CZY JESTEŚMY NA PLUSIE CZY MINUSIE?"
+# ---------------------------------------------------------
+if len(recorded_periods) > 0:
+    if u_diff >= 0:
+        eff = ((u_diff / u_base_comparable) * 100) if u_base_comparable > 0 else 0
+        st.markdown(
+            f"""
+            <div class="ios-balance-widget-plus">
+                <div class="widget-title" style="color: #1E7E34;">🟢 STAN BILANSU: JESTEŚ NA PLUSIE!</div>
+                <div class="widget-amount-plus">+{pln_balance:.2f} PLN</div>
+                <div class="widget-subtext">
+                    🎉 <b>Świetna robota!</b> W pomieszczeniu <b>{current_room}</b> zaoszczędziłeś <b>{u_diff:.0f} U</b> w porównaniu do ubiegłego roku. 
+                    Zużycie jest niższe o <b>{eff:.1f}%</b>. Głowice Sonoff TRVZB działają bardzo efektywnie!
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+    else:
+        diff_abs = abs(u_diff)
+        increase = ((diff_abs / u_base_comparable) * 100) if u_base_comparable > 0 else 0
+        st.markdown(
+            f"""
+            <div class="ios-balance-widget-minus">
+                <div class="widget-title" style="color: #D32F2F;">🔴 STAN BILANSU: JESTEŚ NA MINUSIE</div>
+                <div class="widget-amount-minus">{pln_balance:.2f} PLN</div>
+                <div class="widget-subtext">
+                    ⚠️ <b>Uwaga!</b> W pomieszczeniu <b>{current_room}</b> zużyłeś o <b>{diff_abs:.0f} U więcej</b> niż w analogicznym okresie rok temu (+{increase:.1f}%). 
+                    Sprawdź harmonogram i upewnij się, że obniżasz temperaturę do min. <b>18.5°C</b> w trybie oszczędnym.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+else:
+    st.markdown(
+        """
+        <div class="ios-card" style="border-left: 5px solid #007AFF;">
+            ℹ️ <b>Brak wpisów w sezonie 2026/2027.</b><br>
+            Wprowadź pierwszy odczyt dla wybranego pomieszczenia w panelu bocznym po lewej stronie, aby aktywować kalkulator zysków i strat w czasie rzeczywistym.
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# ---------------------------------------------------------
+# KAFLIKI WYBORU POKOJU
+# ---------------------------------------------------------
 st.markdown("##### 📍 Wybierz Pomieszczenie")
 room_cols = st.columns(len(ROOMS_CONFIG))
 for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
@@ -278,10 +386,8 @@ for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
             st.session_state["selected_room"] = room_key
             st.rerun()
 
-current_room = st.session_state["selected_room"]
-
 # ---------------------------------------------------------
-# SIDEBAR - SMART FORM Z AUTOMATYCZNYM POBIERANIEM DANYCH
+# SIDEBAR - SMART FORM
 # ---------------------------------------------------------
 with st.sidebar:
     st.header(f"📥 Nowy Odczyt: {ROOMS_CONFIG[current_room]['icon']}")
@@ -348,52 +454,9 @@ with st.sidebar:
                     st.rerun()
 
 # ---------------------------------------------------------
-# ANATOMIA DANYCH & OBLICZENIA BILANSU
+# METRYKI PODSUMOWUJĄCE
 # ---------------------------------------------------------
-period_order = list(PERIODS.keys())
-df["period_order"] = df["period_code"].map(lambda x: period_order.index(x) if x in period_order else 99)
-
-df_room = df[df["room_name"] == current_room].sort_values("period_order")
-
-base_df = df_room[df_room["season"] == "2025/2026 (Bazowy)"]
-sonoff_df = df_room[df_room["season"] == "2026/2027 (Sonoff od 09.2026)"]
-
-recorded_periods = sonoff_df["period_code"].unique()
-base_comparable = base_df[base_df["period_code"].isin(recorded_periods)]
-
-u_sonoff_total = sonoff_df["delta_units"].sum()
-u_base_comparable = base_comparable["delta_units"].sum()
-u_diff = u_base_comparable - u_sonoff_total
-
-est_pln_per_unit = 2.45
-pln_balance = u_diff * est_pln_per_unit
-
-# ---------------------------------------------------------
-# HERO KPI BANNER & SEKCJA ZYSK/STRATA
-# ---------------------------------------------------------
-st.markdown(f"### 📊 Bilans dla Pomieszczenia: {current_room}")
-
-if len(recorded_periods) > 0:
-    if u_diff >= 0:
-        st.markdown(
-            f"""<div class="profit-card">
-            🎉 <b>SZACOWANY ZYSK ROZLICZENIOWY: +{pln_balance:.2f} PLN</b><br>
-            W dotychczasowych okresach ({len(recorded_periods)}) zużyto o <b>{u_diff:.0f} U mniej</b> niż w analogicznym czasie rok temu.
-            Efektywność oszczędności wynosi <b>{((u_diff / u_base_comparable)*100 if u_base_comparable > 0 else 0):.1f}%</b>.
-            </div>""",
-            unsafe_allow_html=True
-        )
-    else:
-        st.markdown(
-            f"""<div class="loss-card">
-            ⚠️ <b>PROGNOZOWANA DOPŁATA / STRATA: {pln_balance:.2f} PLN</b><br>
-            W dotychczasowych okresach zużyto o <b>{abs(u_diff):.0f} U więcej</b> niż w zeszłym roku.
-            Zużycie wzrosło o <b>{((abs(u_diff) / u_base_comparable)*100 if u_base_comparable > 0 else 0):.1f}%</b>. Zweryfikuj nastawy Sonoff.
-            </div>""",
-            unsafe_allow_html=True
-        )
-else:
-    st.info("Brak wpisów w sezonie 2026/2027. Wprowadź pierwszy odczyt wrześniowy w panelu bocznym.")
+st.markdown(f"### 📊 Szczegółowe Podsumowanie: {current_room}")
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Zużycie Sonoff 2026", f"{u_sonoff_total:.0f} U")
@@ -460,7 +523,7 @@ with tab_pacing:
         total_base_full = base_df["delta_units"].sum()
         ratio = (u_sonoff_total / u_base_comparable) if u_base_comparable > 0 else 1.0
         projected_total = total_base_full * ratio
-        projected_sav_pln = (total_base_full - projected_total) * est_pln_per_unit
+        projected_sav_pln = (total_base_full - projected_total) * EST_PLN_PER_UNIT
 
         st.markdown("##### 🔮 Prognoza na Koniec Sezonu (Kwiecień 2027)")
         p_col1, p_col2 = st.columns(2)
@@ -477,7 +540,6 @@ with tab_advisor:
     </div>
     """, unsafe_allow_html=True)
 
-    # Tabela zoptymalizowanego zestawienia
     schedule_data = [
         {"Strefa": "Przedpokój & Łazienka", "Stan normalny / Komfort": "Stała „4” (~21°C)", "Stan oszczędny": "Brak obniżeń (24/7)", "Dlaczego nie niżej?": "Działają jako stała tarcza termiczna dla całego mieszkania, ogrzewając strefę centralną od dołu i środka."},
         {"Strefa": "Salon (ściana z suszarnią)", "Stan normalny / Komfort": "20.5°C", "Stan oszczędny": "18.5°C", "Dlaczego nie niżej?": "Granica, poniżej której ściana z suszarnią i strop zaczynają oddawać zbyt dużo energii na zewnątrz."},
