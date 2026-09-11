@@ -479,6 +479,15 @@ with st.sidebar:
                     st.success("Zapisano i zsynchronizowano pomyślnie!")
                     st.rerun()
 
+    # Szybki przycisk cofania (Undo) w panelu bocznym
+    if not df.empty:
+        st.markdown("---")
+        if st.button("↩️ Cofnij ostatni wpis w bazie", use_container_width=True):
+            df = df.iloc[:-1]
+            save_data(df, "Cofnięcie ostatniego wpisu (Undo)")
+            st.warning("Usunięto ostatni wpis z bazy!")
+            st.rerun()
+
     st.markdown("---")
     with st.expander("🛠️ Panel Debug & Opcje Zaawansowane"):
         st.warning("Opcje bezpośrednie – brak wymogu podawania PIN-u.")
@@ -496,7 +505,7 @@ tab_charts, tab_season_comp, tab_analytics, tab_ai_pred, tab_history = st.tabs([
     "📊 Porównanie Sezonów",
     "💸 Zyski i Straty & GJ", 
     "🤖 Predykcja AI i Raport", 
-    "📋 Historia Wpisów"
+    "📋 Historia i Edycja Wpisów"
 ])
 
 with tab_charts:
@@ -589,8 +598,38 @@ with tab_ai_pred:
         """, unsafe_allow_html=True)
 
 with tab_history:
-    st.markdown("### 📋 Rejestr Wszystkich Wpisów")
-    if not df.empty:
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    else:
+    st.markdown("### 📋 Zarządzanie i Historia Wpisów (Edycja / Usuwanie)")
+    if df.empty:
         st.info("Baza danych jest pusta.")
+    else:
+        st.write("Możesz zaznaczyć wiersze w kolumnie **Zaznacz**, aby je usunąć, lub pobrać całą bazę do pliku CSV.")
+        
+        df_editable = df.copy()
+        if "Zaznacz" not in df_editable.columns:
+            df_editable.insert(0, "Zaznacz", False)
+
+        edited_table = st.data_editor(
+            df_editable,
+            use_container_width=True,
+            hide_index=True,
+            column_config={"Zaznacz": st.column_config.CheckboxColumn(required=True)}
+        )
+
+        col_h1, col_h2 = st.columns(2)
+        with col_h1:
+            if st.button("🗑️ Usuń zaznaczone wiersze z bazy", type="primary"):
+                rows_to_keep = edited_table[edited_table["Zaznacz"] == False]
+                rows_to_keep = rows_to_keep.drop(columns=["Zaznacz"])
+                save_data(rows_to_keep, "Usunięto wybrane wiersze z tabeli")
+                st.success("Zaznaczone wpisy zostały usunięte!")
+                st.rerun()
+
+        with col_h2:
+            csv_export = df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📥 Pobierz pełną historię CSV",
+                data=csv_export,
+                file_name="sonoff_heating_history.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
