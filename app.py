@@ -103,15 +103,6 @@ st.markdown("""
         box-shadow: 0 8px 25px rgba(52, 199, 89, 0.12);
         animation: fadeIn 0.5s ease-out;
     }
-    .ios-balance-minus {
-        background: linear-gradient(135deg, rgba(255, 59, 48, 0.18) 0%, rgba(255, 255, 255, 0.95) 100%);
-        border: 2px solid #FF3B30;
-        border-radius: 20px;
-        padding: 18px 22px;
-        margin-bottom: 22px;
-        box-shadow: 0 8px 25px rgba(255, 59, 48, 0.12);
-        animation: fadeIn 0.5s ease-out;
-    }
 
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(6px); }
@@ -162,7 +153,7 @@ def get_github_repo():
     return None
 
 def create_initial_df():
-    # Inicjalizacja ze stanami zero (wrzesień 2026) dla głowic Sonoff
+    # Poprawiony stan zero: start i koniec są równe wartościom bazowym, więc delta = 0.0
     return pd.DataFrame([
         {
             "id": 1,
@@ -172,7 +163,7 @@ def create_initial_df():
             "date_entry": "2026-09-08",
             "room_name": "Sypialnia",
             "meter_number": "11420",
-            "units_start": 0.0,
+            "units_start": 126.7,
             "units_end": 126.7,
             "delta_units": 0.0,
             "gj_start": 0.0,
@@ -188,7 +179,7 @@ def create_initial_df():
             "date_entry": "2026-09-08",
             "room_name": "Pokój Dziecka",
             "meter_number": "11420",
-            "units_start": 0.0,
+            "units_start": 110.4,
             "units_end": 110.4,
             "delta_units": 0.0,
             "gj_start": 0.0,
@@ -312,26 +303,20 @@ st.markdown(f"""
         </div>
         <div class="val-box">
             <div class="val-title">Suma Sezon Sonoff</div>
-            <div class="val-num" style="color: #5856D6;">{total_delta_room:.0f} U</div>
+            <div class="val-num" style="color: #5856D6;">{total_delta_room:.1f} U</div>
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-base_room = df_room[df_room["season"] == "2025/2026 (Bazowy)"]["delta_units"].sum()
-diff_units = base_room - total_delta_room
-pln_balance = diff_units * EST_PLN_PER_UNIT
-
-if total_delta_room > 0 or val_end > 0:
-    if diff_units >= 0:
-        st.markdown(f"""
-        <div class="ios-balance-plus">
-            <span style="font-size: 16px; font-weight: 800; color: #1E7E34;">🟢 BAZA WRZESIEŃ 2026 ZAINSTALOWANA (+{pln_balance:.2f} PLN)</span><br>
-            <span style="font-size: 13px; color: #2C3E50;">
-                Strefa <b>{current_room}</b> gotowa do pomiarów wtorkowych. Stan początkowy: <b>{val_end:.1f} U</b>.
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
+st.markdown(f"""
+<div class="ios-balance-plus">
+    <span style="font-size: 16px; font-weight: 800; color: #1E7E34;">🟢 STAN ZZERO ZAINSTALOWANY (Baza Wrzesień 2026)</span><br>
+    <span style="font-size: 13px; color: #2C3E50;">
+        Strefa <b>{current_room}</b> ma poprawnie zablokowany punkt wyjścia: <b>{val_end:.1f} U</b> (przyrost wynosi 0.0 U). Gotowe na wtorkowe pomiary!
+    </span>
+</div>
+""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # SIDEBAR: FORMULARZ WTORKOWY
@@ -355,8 +340,8 @@ with st.sidebar:
         
         st.markdown("---")
         st.markdown("##### 🔢 Stan Podzielnika [U]")
-        u_start = st.number_input("Wartość Początkowa", min_value=0.0, value=suggested_start, step=1.0)
-        u_end = st.number_input("Wartość Końcowa (z Wtorku)", min_value=0.0, value=suggested_start + 5.0, step=1.0)
+        u_start = st.number_input("Wartość Początkowa", min_value=0.0, value=suggested_start, step=0.1)
+        u_end = st.number_input("Wartość Końcowa (z Wtorku)", min_value=0.0, value=suggested_start + 1.0, step=0.1)
         
         st.markdown("---")
         st.markdown("##### 🏢 Licznik Główny [GJ]")
