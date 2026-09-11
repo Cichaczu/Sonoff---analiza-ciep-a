@@ -43,99 +43,101 @@ def get_outdoor_temp():
     return 12.5
 
 # ---------------------------------------------------------
-# STAN TRYBU CIEMNEGO / JASNEGO (DARK MODE)
+# STYLIZACJA W STYLU iOS 18 (Czysty, nowoczesny UI)
 # ---------------------------------------------------------
-if "dark_mode" not in st.session_state:
-    st.session_state["dark_mode"] = False
-
-is_dark = st.session_state["dark_mode"]
-
-bg_main = "#1C1C1E" if is_dark else "linear-gradient(180deg, #F2F2F7 0%, #E5E5EA 100%)"
-text_color = "#FFFFFF" if is_dark else "#1C1C1E"
-card_bg = "rgba(30, 30, 30, 0.85)" if is_dark else "rgba(255, 255, 255, 0.85)"
-card_border = "rgba(255, 255, 255, 0.15)" if is_dark else "rgba(255, 255, 255, 0.9)"
-val_box_bg = "rgba(44, 44, 46, 0.9)" if is_dark else "rgba(248, 249, 250, 0.9)"
-val_box_border = "rgba(255, 255, 255, 0.1)" if is_dark else "rgba(229, 229, 234, 0.8)"
-sub_text_color = "#8E8E93" if is_dark else "#8E8E93"
-
-st.markdown(f"""
+st.markdown("""
     <style>
     @import url('https://fonts.cdnfonts.com/css/sf-pro-display');
     
-    html, body, [class*="css"] {{
+    html, body, [class*="css"] {
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif !important;
-        color: {text_color} !important;
-    }}
-    .main {{ background: {bg_main} !important; }}
+        color: #1C1C1E !important;
+    }
+    .main { 
+        background: linear-gradient(180deg, #F2F2F7 0%, #E5E5EA 100%) !important; 
+    }
 
-    .ios-room-info-card {{
-        background: {card_bg} !important;
+    .ios-room-info-card {
+        background: rgba(255, 255, 255, 0.85) !important;
         backdrop-filter: blur(30px) saturate(190%);
         -webkit-backdrop-filter: blur(30px) saturate(190%);
         border-radius: 24px !important;
-        padding: 22px 26px !important;
-        border: 1.5px solid {card_border} !important;
-        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.1) !important;
+        padding: 24px 28px !important;
+        border: 1.5px solid rgba(255, 255, 255, 0.9) !important;
+        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.06) !important;
         transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
         margin-bottom: 22px;
-    }}
-    .ios-room-info-card:hover {{
-        transform: translateY(-4px) scale(1.01) !important;
-        box-shadow: 0 18px 45px rgba(0, 122, 255, 0.2) !important;
-        border-color: rgba(0, 122, 255, 0.6) !important;
-    }}
+    }
+    .ios-room-info-card:hover {
+        transform: translateY(-3px) scale(1.005) !important;
+        box-shadow: 0 18px 45px rgba(0, 122, 255, 0.15) !important;
+        border-color: rgba(0, 122, 255, 0.4) !important;
+    }
 
-    .room-header {{
-        font-size: 20px;
+    .room-header {
+        font-size: 22px;
         font-weight: 700;
-        color: {text_color};
+        color: #1C1C1E;
         letter-spacing: -0.4px;
-    }}
-    .meter-badge {{
-        background: rgba(120, 120, 128, 0.2);
-        color: {text_color};
+    }
+    
+    .ios-live-badge {
+        background: rgba(255, 255, 255, 0.9);
+        border: 1px solid rgba(0, 122, 255, 0.2);
+        padding: 10px 18px;
+        border-radius: 16px;
+        font-size: 15px;
+        font-weight: 600;
+        color: #1C1C1E;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+        display: inline-block;
+    }
+
+    .meter-badge {
+        background: rgba(120, 120, 128, 0.12);
+        color: #3A3A3C;
         padding: 5px 12px;
         border-radius: 12px;
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 600;
         font-family: monospace;
-    }}
+    }
 
-    .val-box {{
-        background: {val_box_bg};
+    .val-box {
+        background: rgba(248, 249, 250, 0.9);
         border-radius: 16px;
-        padding: 12px 14px;
-        border: 1px solid {val_box_border};
+        padding: 14px 16px;
+        border: 1px solid rgba(229, 229, 234, 0.8);
         text-align: center;
         transition: all 0.25s ease;
-    }}
-    .val-box:hover {{
+    }
+    .val-box:hover {
         border-color: #007AFF;
-        box-shadow: 0 4px 15px rgba(0, 122, 255, 0.2);
+        box-shadow: 0 4px 15px rgba(0, 122, 255, 0.15);
         transform: scale(1.02);
-    }}
-    .val-title {{
-        font-size: 10px;
+    }
+    .val-title {
+        font-size: 11px;
         text-transform: uppercase;
-        color: {sub_text_color};
+        color: #8E8E93;
         font-weight: 700;
         letter-spacing: 0.6px;
-    }}
-    .val-num {{
-        font-size: 22px;
+    }
+    .val-num {
+        font-size: 24px;
         font-weight: 800;
-        color: #0A84FF;
-        margin-top: 2px;
-    }}
+        color: #007AFF;
+        margin-top: 3px;
+    }
 
-    .ios-balance-plus {{
-        background: linear-gradient(135deg, rgba(52, 199, 89, 0.18) 0%, rgba(50, 50, 50, 0.2) 100%);
+    .ios-balance-plus {
+        background: linear-gradient(135deg, rgba(52, 199, 89, 0.12) 0%, rgba(255, 255, 255, 0.6) 100%);
         border: 2px solid #34C759;
         border-radius: 20px;
         padding: 18px 22px;
         margin-bottom: 22px;
-        box-shadow: 0 8px 25px rgba(52, 199, 89, 0.15);
-    }}
+        box-shadow: 0 8px 25px rgba(52, 199, 89, 0.1);
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -266,15 +268,8 @@ if "selected_room" not in st.session_state:
 
 current_room = st.session_state["selected_room"]
 
-col_title1, col_title2 = st.columns([4, 1])
-with col_title1:
-    st.title("🔥 Sonoff Smart Heating - Panel Sterowania")
-    st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Płynne zarządzanie i inteligentna predykcja AI")
-with col_title2:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("🌙 / ☀️ Przełącz Tryb", use_container_width=True):
-        st.session_state["dark_mode"] = not st.session_state["dark_mode"]
-        st.rerun()
+st.title("🔥 Sonoff Smart Heating - Panel Sterowania")
+st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Płynne zarządzanie i inteligentna predykcja AI w stylu iOS")
 
 room_cols = st.columns(len(ROOMS_CONFIG))
 for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
@@ -296,7 +291,7 @@ if not df_room.empty:
     last_meter = last_row.get("meter_number", ROOMS_CONFIG[current_room]["meter_default"])
     val_start = float(last_row.get("units_start", 0.0))
     val_end = float(last_row.get("units_end", 0.0))
-    last_date = str(last_row.get("date_entry", "Brak wpisów"))
+    last_date = str(last_row.get("date_entry", "Brak odczytów"))
     total_delta_room = df_room[df_room["season"] == "2026/2027 (Sonoff - Wtorki)"]["delta_units"].sum()
 else:
     last_meter = ROOMS_CONFIG[current_room]["meter_default"]
@@ -310,20 +305,20 @@ if live_outdoor_temp < 10.0 and total_delta_room > 15.0:
     st.toast(f"⚠️ Uwaga! Spadek temp. do {live_outdoor_temp}°C w Siemianowicach – wysokie zużycie w strefie {current_room}!", icon="🔥")
 
 # ---------------------------------------------------------
-# KARTA INFORMACYJNA (GLASSMORPHISM)
+# KARTA INFORMACYJNA (iOS 18 GLASSMORPHISM) + POWIĘKSZONA POGODA
 # ---------------------------------------------------------
 st.markdown(f"""
 <div class="ios-room-info-card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
         <div class="room-header">
             {ROOMS_CONFIG[current_room]['icon']} Strefa: <b>{current_room}</b> 
             <span class="meter-badge">{last_meter}</span>
         </div>
-        <div style="font-size: 13px; color: #8E8E93; font-weight: 500;">
-            🌡️ Temp. zewn. (Bytków): <b>{live_outdoor_temp}°C</b> | 📅 Ostatni odczyt: <b>{last_date}</b>
+        <div class="ios-live-badge">
+            🌡️ Temp. zewn. (Bytków): <b style="color: #007AFF;">{live_outdoor_temp}°C</b> &nbsp;|&nbsp; 📅 Ostatni odczyt: <b style="color: #34C759;">{last_date}</b>
         </div>
     </div>
-    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;">
         <div class="val-box">
             <div class="val-title">Wartość Początkowa</div>
             <div class="val-num">{val_start:.1f} U</div>
@@ -338,7 +333,7 @@ st.markdown(f"""
         </div>
         <div class="val-box">
             <div class="val-title">Suma Sezon Sonoff</div>
-            <div class="val-num" style="color: #5856D6;">{total_delta_room:.1f} U</div>
+            <div class="val-num" style="color: #AF52DE;">{total_delta_room:.1f} U</div>
         </div>
     </div>
 </div>
@@ -347,8 +342,8 @@ st.markdown(f"""
 st.markdown(f"""
 <div class="ios-balance-plus">
     <span style="font-size: 16px; font-weight: 800; color: #34C759;">🟢 AKTYWNA LOKALIZACJA: SIEMIANOWICE ŚL. - BYTKÓW (ul. ZHP 3)</span><br>
-    <span style="font-size: 13px; opacity: 0.85;">
-        Automatyczne pobieranie temperatury i korelacja AI z systemem Sonoff działają poprawnie.
+    <span style="font-size: 13px; color: #3A3A3C; opacity: 0.85;">
+        Automatyczne pobieranie temperatury i korelacja AI z systemem Sonoff działają poprawnie w architekturze iOS.
     </span>
 </div>
 """, unsafe_allow_html=True)
@@ -514,14 +509,14 @@ with tab_ai_pred:
     col_p1, col_p2 = st.columns(2)
     with col_p1:
         st.info("💡 **Inteligentna Analiza i Harmonogram (Smart Scheduling):**\n\n"
-                "- System wykrywa stabilną temperaturę w Bytkowie (`" + str(live_outdoor_temp) + "°C`).\n"
+                f"- System wykrywa stabilną temperaturę w Bytkowie (`{live_outdoor_temp}°C`).\n"
                 "- Sugestia: Obniżenie temperatury o 1°C w nocy w strefie *Sypialnia* przyniesie szacowaną oszczędność ok. **5.4 U / tydzień**.\n"
                 "- Brak gwałtownych skoków przegrzewania pomieszczeń.")
     with col_p2:
         est_monthly_units = total_delta_room * 4.2
         est_monthly_cost = est_monthly_units * EST_PLN_PER_UNIT
         st.markdown(f"""
-        <div style="background: rgba(0, 122, 255, 0.1); border-radius: 16px; padding: 18px; border: 1px solid rgba(0, 122, 255, 0.3);">
+        <div style="background: rgba(0, 122, 255, 0.08); border-radius: 16px; padding: 18px; border: 1px solid rgba(0, 122, 255, 0.25);">
             <h4 style="margin: 0; color: #007AFF;">Prognoza na koniec miesiąca</h4>
             <p style="margin: 8px 0 0 0; font-size: 15px;">Przewidywane zużycie dla strefy <b>{current_room}</b>: <b>{est_monthly_units:.1f} U</b></p>
             <p style="margin: 4px 0 0 0; font-size: 15px;">Szacowany koszt: <b>{est_monthly_cost:.2f} PLN</b></p>
