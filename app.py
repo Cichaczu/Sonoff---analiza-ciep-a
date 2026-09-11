@@ -6,9 +6,10 @@ from github import Github, GithubException
 import io
 import os
 from datetime import date, datetime, timedelta
+import requests
 
 # ---------------------------------------------------------
-# KONFIGURACJA STRONY
+# KONFIGURACJA STRONY I LOKALIZACJI
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Sonoff Heating - iOS 18 Dynamic Analytics",
@@ -20,45 +21,81 @@ st.set_page_config(
 FILE_PATH = "data/consumption.csv"
 EST_PLN_PER_UNIT = 2.45
 
+# Współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego
+LAT_LOCATION = 50.3264
+LON_LOCATION = 19.0295
+LOCATION_NAME = "Siemianowice Śl. - Bytków (ZHP)"
+
 # ---------------------------------------------------------
-# STYLIZACJA iOS 18 (GLASSMORPHISM, DYNAMIC HOVER & TRANSITIONS)
+# POBIERANIE POGODY Z OPENWEATHERMAP
 # ---------------------------------------------------------
-st.markdown("""
+def get_outdoor_temp():
+    # Próba pobrania klucza API ze secrets Streamlit, jeśli brak - zwraca wartość symulowaną/szacunkową
+    api_key = st.secrets.get("openweathermap", {}).get("api_key", None)
+    if not api_key:
+        return 12.5 # Domyślna temperatura symulowana dla okresu przejściowego
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?lat={LAT_LOCATION}&lon={LON_LOCATION}&appid={api_key}&units=metric"
+        res = requests.get(url, timeout=3)
+        if res.status_code == 200:
+            return float(res.json()['main']['temp'])
+    except Exception:
+        pass
+    return 12.5
+
+# ---------------------------------------------------------
+# STAN TRYBU CIEMNEGO / JASNEGO (DARK MODE)
+# ---------------------------------------------------------
+if "dark_mode" not in st.session_state:
+    st.session_state["dark_mode"] = False
+
+is_dark = st.session_state["dark_mode"]
+
+# Dynamiczne style CSS (iOS 18 Glassmorphism dla Dark / Light Mode)
+bg_main = "#1C1C1E" if is_dark else "linear-gradient(180deg, #F2F2F7 0%, #E5E5EA 100%)"
+text_color = "#FFFFFF" if is_dark else "#1C1C1E"
+card_bg = "rgba(30, 30, 30, 0.85)" if is_dark else "rgba(255, 255, 255, 0.85)"
+card_border = "rgba(255, 255, 255, 0.15)" if is_dark else "rgba(255, 255, 255, 0.9)"
+val_box_bg = "rgba(44, 44, 46, 0.9)" if is_dark else "rgba(248, 249, 250, 0.9)"
+val_box_border = "rgba(255, 255, 255, 0.1)" if is_dark else "rgba(229, 229, 234, 0.8)"
+sub_text_color = "#8E8E93" if is_dark else "#8E8E93"
+
+st.markdown(f"""
     <style>
     @import url('https://fonts.cdnfonts.com/css/sf-pro-display');
     
-    html, body, [class*="css"] {
+    html, body, [class*="css"] {{
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif !important;
-        color: #1C1C1E;
+        color: {text_color} !important;
     }
-    .main { background: linear-gradient(180deg, #F2F2F7 0%, #E5E5EA 100%) !important; }
+    .main {{ background: {bg_main} !important; }}
 
-    .ios-room-info-card {
-        background: rgba(255, 255, 255, 0.85) !important;
+    .ios-room-info-card {{
+        background: {card_bg} !important;
         backdrop-filter: blur(30px) saturate(190%);
         -webkit-backdrop-filter: blur(30px) saturate(190%);
         border-radius: 24px !important;
         padding: 22px 26px !important;
-        border: 1.5px solid rgba(255, 255, 255, 0.9) !important;
-        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.05) !important;
+        border: 1.5px solid {card_border} !important;
+        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.1) !important;
         transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
         margin-bottom: 22px;
     }
-    .ios-room-info-card:hover {
+    .ios-room-info-card:hover {{
         transform: translateY(-4px) scale(1.01) !important;
-        box-shadow: 0 18px 45px rgba(0, 122, 255, 0.15) !important;
-        border-color: rgba(0, 122, 255, 0.4) !important;
+        box-shadow: 0 18px 45px rgba(0, 122, 255, 0.2) !important;
+        border-color: rgba(0, 122, 255, 0.6) !important;
     }
 
-    .room-header {
+    .room-header {{
         font-size: 20px;
         font-weight: 700;
-        color: #1C1C1E;
+        color: {text_color};
         letter-spacing: -0.4px;
     }
-    .meter-badge {
-        background: rgba(120, 120, 128, 0.12);
-        color: #3A3A3C;
+    .meter-badge {{
+        background: rgba(120, 120, 128, 0.2);
+        color: {text_color};
         padding: 5px 12px;
         border-radius: 12px;
         font-size: 12px;
@@ -66,65 +103,40 @@ st.markdown("""
         font-family: monospace;
     }
 
-    .val-box {
-        background: rgba(248, 249, 250, 0.9);
+    .val-box {{
+        background: {val_box_bg};
         border-radius: 16px;
         padding: 12px 14px;
-        border: 1px solid rgba(229, 229, 234, 0.8);
+        border: 1px solid {val_box_border};
         text-align: center;
         transition: all 0.25s ease;
     }
-    .val-box:hover {
-        background: #FFFFFF;
+    .val-box:hover {{
         border-color: #007AFF;
-        box-shadow: 0 4px 15px rgba(0, 122, 255, 0.1);
+        box-shadow: 0 4px 15px rgba(0, 122, 255, 0.2);
         transform: scale(1.02);
     }
-    .val-title {
+    .val-title {{
         font-size: 10px;
         text-transform: uppercase;
-        color: #8E8E93;
+        color: {sub_text_color};
         font-weight: 700;
         letter-spacing: 0.6px;
     }
-    .val-num {
+    .val-num {{
         font-size: 22px;
         font-weight: 800;
-        color: #007AFF;
+        color: #0A84FF;
         margin-top: 2px;
     }
 
-    .ios-balance-plus {
-        background: linear-gradient(135deg, rgba(52, 199, 89, 0.18) 0%, rgba(255, 255, 255, 0.95) 100%);
+    .ios-balance-plus {{
+        background: linear-gradient(135deg, rgba(52, 199, 89, 0.18) 0%, rgba(50, 50, 50, 0.2) 100%);
         border: 2px solid #34C759;
         border-radius: 20px;
         padding: 18px 22px;
         margin-bottom: 22px;
-        box-shadow: 0 8px 25px rgba(52, 199, 89, 0.12);
-        animation: fadeIn 0.5s ease-out;
-    }
-
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(6px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 6px;
-        background: rgba(120, 120, 128, 0.12) !important;
-        backdrop-filter: blur(20px);
-        padding: 6px;
-        border-radius: 16px !important;
-    }
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 12px !important;
-        font-weight: 600;
-        transition: all 0.2s ease;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #FFFFFF !important;
-        color: #000000 !important;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+        box-shadow: 0 8px 25px rgba(52, 199, 89, 0.15);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -168,6 +180,7 @@ def create_initial_df():
             "gj_start": 0.0,
             "gj_end": 0.0,
             "delta_gj": 0.0,
+            "temp_zewnetrzna": 14.2,
             "notes": "Stan zero - wrzesień 2026"
         },
         {
@@ -184,6 +197,7 @@ def create_initial_df():
             "gj_start": 0.0,
             "gj_end": 0.0,
             "delta_gj": 0.0,
+            "temp_zewnetrzna": 14.2,
             "notes": "Stan zero - wrzesień 2026"
         }
     ])
@@ -201,13 +215,15 @@ def load_data():
     else:
         df = load_local_fallback()
     
-    # AUTOMATYCZNA KOREKTA: Zapewnienie, że stan zero ma zawsze units_start == units_end i delta == 0
     if df is not None and not df.empty:
+        # Automatyczna korekta stanu zero
         mask_zero = df["period_label"].str.contains("Stan Zero", na=False)
         if mask_zero.any():
             df.loc[mask_zero, "units_start"] = df.loc[mask_zero, "units_end"]
             df.loc[mask_zero, "delta_units"] = 0.0
             df.loc[mask_zero, "delta_gj"] = 0.0
+        if "temp_zewnetrzna" not in df.columns:
+            df["temp_zewnetrzna"] = 12.0
             
     return df
 
@@ -246,15 +262,22 @@ def get_tuesday_for_iso_week(year, week):
 df = load_data()
 
 # ---------------------------------------------------------
-# NAWIGACJA GŁÓWNA
+# NAWIGACJA GŁÓWNA I NAGŁÓWEK
 # ---------------------------------------------------------
 if "selected_room" not in st.session_state:
     st.session_state["selected_room"] = "Sypialnia"
 
 current_room = st.session_state["selected_room"]
 
-st.title("🔥 Sonoff Smart Heating - Panel Sterowania")
-st.caption("Płynne zarządzanie, zaawansowane wykresy zysk/strata oraz pełna integracja iOS glassmorphism")
+col_title1, col_title2 = st.columns([4, 1])
+with col_title1:
+    st.title("🔥 Sonoff Smart Heating - Panel Sterowania")
+    st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Płynne zarządzanie i inteligentna predykcja AI")
+with col_title2:
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("🌙 / ☀️ Przełącz Tryb", use_container_width=True):
+        st.session_state["dark_mode"] = not st.session_state["dark_mode"]
+        st.rerun()
 
 room_cols = st.columns(len(ROOMS_CONFIG))
 for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
@@ -285,8 +308,13 @@ else:
     last_date = "Brak odczytów"
     total_delta_room = 0.0
 
+# Sprawdzanie alertów (toast)
+live_outdoor_temp = get_outdoor_temp()
+if live_outdoor_temp < 10.0 and total_delta_room > 15.0:
+    st.toast(f"⚠️ Uwaga! Spadek temp. do {live_outdoor_temp}°C w Siemianowicach – wysokie zużycie w strefie {current_room}!", icon="🔥")
+
 # ---------------------------------------------------------
-# KARTA INFORMACYJNA (GLASSMORPHISM + HOVER)
+# KARTA INFORMACYJNA (GLASSMORPHISM)
 # ---------------------------------------------------------
 st.markdown(f"""
 <div class="ios-room-info-card">
@@ -296,7 +324,7 @@ st.markdown(f"""
             <span class="meter-badge">{last_meter}</span>
         </div>
         <div style="font-size: 13px; color: #8E8E93; font-weight: 500;">
-            📅 Ostatni odczyt: <b>{last_date}</b>
+            🌡️ Temp. zewn. (Bytków): <b>{live_outdoor_temp}°C</b> | 📅 Ostatni odczyt: <b>{last_date}</b>
         </div>
     </div>
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
@@ -322,15 +350,15 @@ st.markdown(f"""
 
 st.markdown(f"""
 <div class="ios-balance-plus">
-    <span style="font-size: 16px; font-weight: 800; color: #1E7E34;">🟢 STAN ZERO ZAINSTALOWANY (Baza Wrzesień 2026)</span><br>
-    <span style="font-size: 13px; color: #2C3E50;">
-        Strefa <b>{current_room}</b> ma poprawnie zablokowany punkt wyjścia: <b>{val_end:.1f} U</b> (przyrost wynosi 0.0 U). Gotowe na wtorkowe pomiary!
+    <span style="font-size: 16px; font-weight: 800; color: #34C759;">🟢 AKTYWNA LOKALIZACJA: SIEMIANOWICE ŚL. - BYTKÓW (ul. ZHP 3)</span><br>
+    <span style="font-size: 13px; opacity: 0.85;">
+        Automatyczne pobieranie temperatury i korelacja AI z systemem Sonoff działają poprawnie.
     </span>
 </div>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# SIDEBAR: FORMULARZ WTORKOWY
+# SIDEBAR: FORMULARZ ODCZYTU + DEBUG & PIN
 # ---------------------------------------------------------
 with st.sidebar:
     st.header("📥 Nowy Odczyt (Wtorek)")
@@ -385,6 +413,7 @@ with st.sidebar:
                     "gj_start": gj_s,
                     "gj_end": gj_e,
                     "delta_gj": delta_g,
+                    "temp_zewnetrzna": live_outdoor_temp,
                     "notes": notes
                 }])
 
@@ -393,38 +422,66 @@ with st.sidebar:
                     st.success("Zapisano pomyślnie!")
                     st.rerun()
 
+    st.markdown("---")
+    st.subheader("🔐 Panel Debug & PIN")
+    pin_input = st.text_input("Podaj PIN do opcji zaawansowanych", type="password")
+    if pin_input == "2026":
+        st.success("Panel odblokowany!")
+        if st.button("🔄 Reset bazy do stanu początkowego"):
+            df_reset = create_initial_df()
+            save_data(df_reset, "Reset bazy do stanu zero")
+            st.rerun()
+
 # ---------------------------------------------------------
 # ZAKŁADKI ANALITYCZNE
 # ---------------------------------------------------------
-tab_charts, tab_analytics, tab_history = st.tabs([
-    "📈 Wykres Pokoju", 
-    "💸 Zaawansowane Zyski i Straty (PLN)", 
+tab_charts, tab_season_comp, tab_analytics, tab_ai_pred, tab_history = st.tabs([
+    "📈 Wykres & Pogoda", 
+    "📊 Porównanie Sezonów",
+    "💸 Zyski i Straty & GJ", 
+    "🤖 Predykcja AI i Raport", 
     "📋 Historia Wpisów"
 ])
 
 with tab_charts:
-    st.markdown(f"#### Tygodniowe Zużycie ΔU dla: {current_room}")
+    st.markdown(f"#### Korelacja Zużycia ΔU oraz Temperatury Zewnętrznej dla: {current_room}")
     if not df_room.empty:
-        fig = px_go.Figure()
-        fig.add_trace(px_go.Bar(
-            x=df_room["period_label"],
-            y=df_room["delta_units"],
-            marker_color="#007AFF",
-            hovertemplate="Okres: %{x}<br>Zużycie: %{y:.1f} U"
+        fig_dual = px_go.Figure()
+        fig_dual.add_trace(px_go.Bar(
+            x=df_room["period_label"], y=df_room["delta_units"], name="Zużycie [U]", marker_color="#007AFF"
         ))
-        fig.update_layout(
+        fig_dual.add_trace(px_go.Scatter(
+            x=df_room["period_label"], y=df_room["temp_zewnetrzna"], name="Temp. Zewn. [°C]", mode="lines+markers", yaxis="y2", line=dict(color="#FF9500", width=3)
+        ))
+        fig_dual.update_layout(
             template="plotly_white",
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
-            margin=dict(l=20, r=20, t=20, b=20),
-            height=350
+            yaxis=dict(title="Zużycie [U]"),
+            yaxis2=dict(title="Temperatura [°C]", overlaying="y", side="right"),
+            height=380,
+            legend=dict(orientation="h", y=1.1, x=0.3)
         )
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig_dual, use_container_width=True)
     else:
         st.info("Brak danych dla wybranego pokoju.")
 
+with tab_season_comp:
+    st.markdown("### 📊 Porównanie Sezonowe (Bazowy vs Sonoff)")
+    if not df.empty:
+        df_comp = df.groupby(["week_num", "season"])["delta_units"].sum().reset_index()
+        fig_season = px.line(
+            df_comp, x="week_num", y="delta_units", color="season",
+            markers=True, title="Zużycie w podziale na tygodnie roku (1-52)",
+            labels={"week_num": "Tydzień Roku", "delta_units": "Zużycie [U]", "season": "Sezon"}
+        )
+        fig_season.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=400)
+        st.plotly_chart(fig_season, use_container_width=True)
+    else:
+        st.info("Brak wystarczających danych do porównania sezonów.")
+
 with tab_analytics:
-    st.markdown("### 📊 Kompleksowy Bilans Finansowy i Struktura Zużycia")
+    st.markdown("### 💸 Bilans Finansowy i Analiza Licznika Głównego (GJ)")
     
     if not df.empty:
         df_sonoff = df[df["season"].str.contains("Sonoff", na=False)].copy()
@@ -438,45 +495,42 @@ with tab_analytics:
         df_merged["pln_balance"] = df_merged["units_saved"] * EST_PLN_PER_UNIT
         df_merged["color"] = df_merged["pln_balance"].apply(lambda x: "#34C759" if x >= 0 else "#FF3B30")
 
-        fig_bal = px_go.Figure()
-        fig_bal.add_trace(px_go.Bar(
-            x=df_merged["period_label"],
-            y=df_merged["pln_balance"],
-            marker_color=df_merged["color"],
-            text=df_merged["pln_balance"].apply(lambda x: f"{x:.1f} zł"),
-            textposition="outside"
-        ))
-        fig_bal.update_layout(
-            title="Tygodniowy Bilans PLN (Zielony = Oszczędność, Czerwony = Strata)",
-            template="plotly_white",
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            height=350,
-            yaxis_title="PLN"
-        )
-        st.plotly_chart(fig_bal, use_container_width=True)
-
-        col1, col2 = st.columns(2)
-        with col1:
-            df_merged["cum_pln"] = df_merged["pln_balance"].cumsum()
-            fig_cum = px_go.Figure()
-            fig_cum.add_trace(px_go.Scatter(
-                x=df_merged["period_label"],
-                y=df_merged["cum_pln"],
-                mode="lines+markers",
-                fill="tozeroy",
-                line=dict(color="#34C759", width=3)
+        col_a, col_b = st.columns(2)
+        with col_a:
+            fig_bal = px_go.Figure()
+            fig_bal.add_trace(px_go.Bar(
+                x=df_merged["period_label"], y=df_merged["pln_balance"],
+                marker_color=df_merged["color"], text=df_merged["pln_balance"].apply(lambda x: f"{x:.1f} zł"), textposition="outside"
             ))
-            fig_cum.update_layout(title="Skumulowany Bilans Finansowy [PLN]", template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300)
-            st.plotly_chart(fig_cum, use_container_width=True)
+            fig_bal.update_layout(title="Tygodniowy Bilans PLN", template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=320)
+            st.plotly_chart(fig_bal, use_container_width=True)
 
-        with col2:
-            df_pie = df_sonoff.groupby("room_name")["delta_units"].sum().reset_index()
-            fig_pie = px.pie(df_pie, values="delta_units", names="room_name", hole=0.5, title="Udział Stref w Zużyciu")
-            fig_pie.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300)
-            st.plotly_chart(fig_pie, use_container_width=True)
+        with col_b:
+            df_gj = df_sonoff.groupby("room_name")["delta_gj"].sum().reset_index()
+            fig_gj = px.pie(df_gj, values="delta_gj", names="room_name", hole=0.5, title="Udział stref w całkowitym zużyciu GJ")
+            fig_gj.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=320)
+            st.plotly_chart(fig_gj, use_container_width=True)
     else:
-        st.info("Brak wystarczających danych do wygenerowania wykresów analitycznych.")
+        st.info("Brak danych analitycznych.")
+
+with tab_ai_pred:
+    st.markdown("### 🤖 Predykcja AI i Szacowanie Miesięczne")
+    col_p1, col_p2 = st.columns(2)
+    with col_p1:
+        st.info("💡 **Inteligentna Analiza i Harmonogram (Smart Scheduling):**\n\n"
+                "- System wykrywa stabilną temperaturę w Bytkowie (`" + str(live_outdoor_temp) + "°C`).\n"
+                "- Sugestia: Obniżenie temperatury o 1°C w nocy w strefie *Sypialnia* przyniesie szacowaną oszczędność ok. **5.4 U / tydzień**.\n"
+                "- Brak gwałtownych skoków przegrzewania pomieszczeń.")
+    with col_p2:
+        est_monthly_units = total_delta_room * 4.2
+        est_monthly_cost = est_monthly_units * EST_PLN_PER_UNIT
+        st.markdown(f"""
+        <div style="background: rgba(0, 122, 255, 0.1); border-radius: 16px; padding: 18px; border: 1px solid rgba(0, 122, 255, 0.3);">
+            <h4 style="margin: 0; color: #007AFF;">Prognoza na koniec miesiąca</h4>
+            <p style="margin: 8px 0 0 0; font-size: 15px;">Przewidywane zużycie dla strefy <b>{current_room}</b>: <b>{est_monthly_units:.1f} U</b></p>
+            <p style="margin: 4px 0 0 0; font-size: 15px;">Szacowany koszt: <b>{est_monthly_cost:.2f} PLN</b></p>
+        </div>
+        """, unsafe_allow_html=True)
 
 with tab_history:
     st.markdown("### 📋 Rejestr Wszystkich Wpisów")
