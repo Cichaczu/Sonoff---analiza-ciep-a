@@ -1,6 +1,3 @@
-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
-
-
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as px_go
@@ -24,10 +21,15 @@ st.set_page_config(
 
 FILE_PATH = "data/consumption.csv"
 EST_PLN_PER_UNIT = 2.45
+APARTMENT_AREA_M2 = 66.54  # Dokładna powierzchnia lokalu
 
 # Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m²
-SSM_CO_MONTHLY_ADVANCE = 774.53  # 11.64 zł / m² / mc (zaliczka miesięczna)
+SSM_CO_MONTHLY_ADVANCE = 774.53  # 11.64 zł / m² / mc (zaliczka miesięczna CO)
+SSM_TOTAL_MONTHLY_RENT = 1280.00 # Całkowity miesięczny czynsz do SSM (eksploatacja + woda + CO + fundusz)
+SSM_NON_HEATING_RENT = SSM_TOTAL_MONTHLY_RENT - SSM_CO_MONTHLY_ADVANCE # Opłaty stałe bez CO (~505.47 zł)
+
 SSM_SEASON_MONTHS = 7            # Sezon grzewczy (październik - kwiecień)
+SSM_TOTAL_WEEKS = 30             # Przybliżona liczba tygodni w sezonie
 SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity budżet zaliczkowy CO na sezon (~5421.71 zł)
 
 # Współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego
@@ -139,7 +141,6 @@ st.markdown("""
         margin-top: 3px;
     }
     
-    /* Fancy alert box style */
     .fancy-alert-card {
         background: linear-gradient(135deg, rgba(0, 122, 255, 0.1) 0%, rgba(52, 199, 89, 0.1) 100%);
         border: 2px solid #007AFF;
@@ -238,7 +239,6 @@ def create_initial_df():
         }
     ])
 
-# Cachowanie danych (TTL: 5 minut), aby nie blokować API Githuba przy odświeżeniach
 @st.cache_data(ttl=300, show_spinner=False)
 def load_data():
     repo = get_github_repo()
@@ -288,14 +288,12 @@ def save_data(df, commit_message="Aktualizacja odczytu"):
         except Exception:
             success = False
             
-    # Propagacja na plik lokalny w ramach fallbacku
     if not success:
         os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
         df.to_csv(FILE_PATH, index=False)
         success = True
         
     if success:
-        # Bardzo ważne: czyścimy cache pobierania, aby od razu widzieć nowy stan
         st.cache_data.clear()
         
     return success
@@ -308,17 +306,17 @@ def get_tuesday_for_iso_week(year, week):
 df = load_data()
 
 # ---------------------------------------------------------
-# SPRAWDŻ CZY DZIŚ JEST WTOREK (Automatyczne okno alertu)
+# SPRAWDŹ CZY DZIŚ JEST WTOREK (Automatyczne okno alertu)
 # ---------------------------------------------------------
 today = date.today()
 is_tuesday = (today.weekday() == 1)
 
 # ---------------------------------------------------------
-# OBSŁUGA TYMCZASOWEGO POWIADOMIENIA FANCY (5 MINUT / 300 SEKUND)
+# OBSŁUGA TYMCZASOWEGO POWIADOMIENIA FANCY (5 MINUT)
 # ---------------------------------------------------------
 if "fancy_alert" in st.session_state:
     elapsed = time.time() - st.session_state["fancy_alert"]["timestamp"]
-    if elapsed > 300:  # 5 minut
+    if elapsed > 300:
         del st.session_state["fancy_alert"]
 
 # ---------------------------------------------------------
@@ -329,8 +327,8 @@ if "selected_room" not in st.session_state:
 
 current_room = st.session_state["selected_room"]
 
-st.title("🔥 Sonoff Smart Heating - Panel Sterowania")
-st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Płynne zarządzanie i inteligentna predykcja AI w stylu iOS")
+st.title("🔥 Sonoff Smart Heating - Panel Sterowania & SSM Analytics")
+st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielnia Mieszkaniowa (SSM)")
 
 # Wyświetlenie fancy powiadomienia, jeśli jest aktywne
 if "fancy_alert" in st.session_state:
@@ -341,27 +339,27 @@ if "fancy_alert" in st.session_state:
         <p style="margin: 4px 0; font-size: 16px;"><b>Przyrost w tym tygodniu ($\Delta U$):</b> <span style="color: #34C759; font-weight: 700;">+{fa['delta']:.1f} U</span> ({fa['delta']*EST_PLN_PER_UNIT:.2f} PLN)</p>
         <p style="margin: 4px 0; font-size: 16px;"><b>Porównanie tydzień do tygodnia:</b> <span style="color: {'#34C759' if fa['diff_vs_prev'] <= 0 else '#FF3B30'}; font-weight: 700;">{fa['diff_vs_prev']:+.1f}%</span> względem poprz. odczytu</p>
         <p style="margin: 4px 0; font-size: 16px;"><b>Całkowity bilans strefy w sezonie:</b> <b style="color: #AF52DE;">{fa['total_room_units']:.1f} U</b> (~{fa['total_room_units']*EST_PLN_PER_UNIT:.2f} PLN)</p>
-        <p style="margin: 8px 0 0 0; font-size: 12px; color: #8E8E93;">Komunikat zniknie automatycznie za kilka minut.</p>
+        <p style="margin: 8px 0 0 0; font-size: 12px; color: #8E8E93;">Komunikat zniknie automatycznie po kilkuset sekundach.</p>
     </div>
     """, unsafe_allow_html=True)
 
 room_cols = st.columns(len(ROOMS_CONFIG))
 for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
     is_active = (current_room == room_key)
+    btn_label = f"{info['icon']} {room_key}" if room_key != "Licznik Główny" else f"{info['icon']} {room_key} (Suma)"
     with room_cols[idx]:
-        if st.button(f"{info['icon']} {room_key}", key=f"btn_{room_key}", use_container_width=True, type="primary" if is_active else "secondary"):
+        if st.button(btn_label, key=f"btn_{room_key}", use_container_width=True, type="primary" if is_active else "secondary"):
             st.session_state["selected_room"] = room_key
             st.rerun()
 
 st.divider()
 
 # ---------------------------------------------------------
-# OBLICZENIA DLA BIEŻĄCEGO POKOJU I MIESZKANIA (STAŁY STAN POCZĄTKOWY ROKU)
+# OBLICZENIA DLA BIEŻĄCEGO POKOJU I MIESZKANIA
 # ---------------------------------------------------------
 df_room = df[df["room_name"] == current_room].sort_values(by=["date_entry", "id"]) if not df.empty else pd.DataFrame()
-
-# Wyznaczenie stałego stanu początkowego dla danej strefy (najwcześniejszy wpis sezonu sonoff lub bazowy)
 df_room_sonoff = df_room[df_room["season"].str.contains("Sonoff", na=False)] if not df_room.empty else pd.DataFrame()
+
 if not df_room_sonoff.empty:
     val_start = float(df_room_sonoff.iloc[0]["units_start"])
     last_row = df_room_sonoff.iloc[-1]
@@ -379,23 +377,37 @@ else:
 last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty else 0.0
 live_outdoor_temp = get_outdoor_temp()
 
-# Jeśli wybrany jest "Licznik Główny", zsumuj przyrosty ze wszystkich regularnych stref (Salon, Sypialnia, Pokój Dziecka)
+# JEDNOZNACZNA LOGIKA: Licznik Główny to suma wszystkich pokoi (Salon + Sypialnia + Pokój Dziecka)
 if current_room == "Licznik Główny":
     df_sonoff_all_rooms = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")]
     total_delta_room = df_sonoff_all_rooms["delta_units"].sum() if not df_sonoff_all_rooms.empty else 0.0
     val_start = 0.0
     val_end = total_delta_room
+    last_meter = "GJ-MAIN-SUMA"
 
 # Obliczenia dla całego mieszkania (Sezon Sonoff)
-df_sonoff_all = df[df["season"].str.contains("Sonoff", na=False)] if not df.empty else pd.DataFrame()
+df_sonoff_all = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")] if not df.empty else pd.DataFrame()
+if df_sonoff_all.empty:
+    df_sonoff_all = df[df["season"].str.contains("Sonoff", na=False)] if not df.empty else pd.DataFrame()
+
 total_apartment_units = df_sonoff_all["delta_units"].sum() if not df_sonoff_all.empty else 0.0
 total_realtime_cost = total_apartment_units * EST_PLN_PER_UNIT
 
-# Udział procentowy strefy w mieszkaniu
-room_share_pct = (total_delta_room / total_apartment_units * 100) if total_apartment_units > 0 else 0.0
+# Liczba zarejestrowanych tygodni w obecnym sezonie
+weeks_logged_count = max(1, df_sonoff_all["week_num"].nunique()) if not df_sonoff_all.empty else 1
 
-# Budżet oparty na oficjalnej zaliczce ze spółdzielni (774,53 zł / mc)
-season_budget_pln = SSM_ANNUAL_CO_BUDGET
+# OBLICZENIA SPÓŁDZIELNIA (SSM) W CZASIE RZECZYWISTYM
+ssm_paid_advances_to_date = (weeks_logged_count / SSM_TOTAL_WEEKS) * SSM_ANNUAL_CO_BUDGET
+ssm_net_balance_to_date = ssm_paid_advances_to_date - total_realtime_cost  # Dodatni = NADPŁATA, Ujemny = NIEDOPŁATA
+ssm_projected_full_season_cost = (total_realtime_cost / weeks_logged_count) * SSM_TOTAL_WEEKS
+ssm_projected_refund_or_extra = SSM_ANNUAL_CO_BUDGET - ssm_projected_full_season_cost
+
+# Koszt na m² lokalu
+cost_per_m2_actual = total_realtime_cost / APARTMENT_AREA_M2
+ssm_advance_per_m2_to_date = ssm_paid_advances_to_date / APARTMENT_AREA_M2
+
+# Udział procentowy strefy
+room_share_pct = 100.0 if current_room == "Licznik Główny" else ((total_delta_room / total_apartment_units * 100) if total_apartment_units > 0 else 0.0)
 
 # ---------------------------------------------------------
 # AUTOMATYCZNE OKNO (MODAL) DLA WTORKOWYCH ODCZYTÓW
@@ -426,14 +438,12 @@ if is_tuesday:
                 modal_notes = st.text_input("Uwagi / Nastawa", value="Wtorkowa synchronizacja automatyczna")
 
                 if st.form_submit_button("⚡ Zapisz i zsynchronizuj aplikację", use_container_width=True):
-                    # Przyrost to wartość końcowa minus stały stan początkowy (lub delta względem poprzedniego odczytu)
                     prev_val_end = val_end if not df_room_sonoff.empty else val_start
                     delta_u_m = u_e - prev_val_end
                     
-                    # Poprawka: Rejestrujemy ewentualną anomalię / spadek wartości
                     if delta_u_m < 0:
                         delta_u_m = 0.0
-                        modal_notes = f"{modal_notes} [Auto-korekta: wykryto ujemną deltę - spadek wartości]" if modal_notes else "[Auto-korekta: wykryto ujemną deltę]"
+                        modal_notes = f"{modal_notes} [Auto-korekta: ujemna delta]" if modal_notes else "[Auto-korekta: ujemna delta]"
                         
                     delta_g_m = gj_e_m - gj_s_m if gj_e_m > gj_s_m else 0.0
 
@@ -462,7 +472,6 @@ if is_tuesday:
 
                         df = pd.concat([df, new_row_modal], ignore_index=True)
                         if save_data(df, commit_message=f"Automatyczny odczyt wtorkowy: {current_room} T{current_iso_w}"):
-                            # Oblicz różnicę względem poprzedniego wpisu
                             prev_delta = last_delta if last_delta > 0 else 1.0
                             diff_vs_prev = ((delta_u_m - prev_delta) / prev_delta * 100) if prev_delta > 0 else 0.0
                             new_total_room = total_delta_room + delta_u_m
@@ -478,14 +487,19 @@ if is_tuesday:
                             st.rerun()
 
 # ---------------------------------------------------------
-# KARTA INFORMACYJNA (iOS 18 GLASSMORPHISM + UDZIAŁ %)
+# KARTA INFORMACYJNA (iOS 18 GLASSMORPHISM)
 # ---------------------------------------------------------
+room_desc_subtitle = "Suma wszystkich pokoi w mieszkaniu" if current_room == "Licznik Główny" else f"Pojedyncza strefa grzewcza ({room_share_pct:.1f}% udziału w mieszkaniu)"
+
 st.markdown(f"""
 <div class="ios-room-info-card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
-        <div class="room-header">
-            {ROOMS_CONFIG[current_room]['icon']} Strefa: <b>{current_room}</b> 
-            <span class="meter-badge">{last_meter}</span>
+        <div>
+            <div class="room-header">
+                {ROOMS_CONFIG[current_room]['icon']} Strefa: <b>{current_room}</b> 
+                <span class="meter-badge">{last_meter}</span>
+            </div>
+            <div style="font-size: 13px; color: #8E8E93; margin-top: 2px;">ℹ️ {room_desc_subtitle}</div>
         </div>
         <div class="ios-live-badge">
             🌡️ Temp. zewn. (Bytków): <b style="color: #007AFF;">{live_outdoor_temp}°C</b> &nbsp;|&nbsp; 📊 Udział w mieszkaniu: <b style="color: #AF52DE;">{room_share_pct:.1f}%</b>
@@ -513,7 +527,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# WIDŻETY KPI (Koszt w czasie rzeczywistym + Efektywność + Budżet SSM)
+# WIDŻETY KPI (SSM REAL-TIME + PRZELICZNIK M² + EFEKTYWNOŚĆ)
 # ---------------------------------------------------------
 unique_weeks = sorted(df_sonoff_all["week_num"].unique()) if not df_sonoff_all.empty else []
 if len(unique_weeks) >= 2:
@@ -526,43 +540,48 @@ if len(unique_weeks) >= 2:
 else:
     trend_str = "Brak danych historycznych"
 
-temp_diff_frost = max(0.1, 20.0 - live_outdoor_temp)
-thermal_efficiency_index = total_realtime_cost / temp_diff_frost
-
-budget_progress_ratio = min(1.0, total_realtime_cost / season_budget_pln) if season_budget_pln > 0 else 0.0
+# Status rozliczenia ze spółdzielnią
+if ssm_net_balance_to_date >= 0:
+    ssm_status_html = f"<span style='color: #34C759; font-weight: 800;'>🟢 NADPŁATA: +{ssm_net_balance_to_date:.2f} PLN</span>"
+    ssm_subtext = "Refundacja gotówki ze Spółdzielni"
+else:
+    ssm_status_html = f"<span style='color: #FF3B30; font-weight: 800;'>🔴 NIEDOPŁATA: {ssm_net_balance_to_date:.2f} PLN</span>"
+    ssm_subtext = "Wymagana dopłata na koniec sezonu"
 
 kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
 with kpi_col1:
     st.markdown(f"""
     <div class="val-box" style="padding: 16px;">
-        <div class="val-title">💰 Łączny koszt w mieszkaniu (Real-time)</div>
-        <div class="val-num" style="color: #FF9500; font-size: 26px;">{total_realtime_cost:.2f} PLN</div>
-        <div style="font-size: 12px; color: #8E8E93; margin-top: 4px;">Trend: <b>{trend_str}</b></div>
+        <div class="val-title">🏢 Bilans na dziś vs Zaliczki SSM</div>
+        <div class="val-num" style="font-size: 22px;">{ssm_status_html}</div>
+        <div style="font-size: 12px; color: #8E8E93; margin-top: 4px;">Wpłacono zaliczek: <b>{ssm_paid_advances_to_date:.1f} zł</b> | Zużyto: <b>{total_realtime_cost:.1f} zł</b></div>
     </div>
     """, unsafe_allow_html=True)
 
 with kpi_col2:
     st.markdown(f"""
     <div class="val-box" style="padding: 16px;">
-        <div class="val-title">🌡️ Efektywność Termiczna (PLN / °C mrozu)</div>
-        <div class="val-num" style="color: #007AFF; font-size: 26px;">{thermal_efficiency_index:.2f} zł / °C</div>
-        <div style="font-size: 12px; color: #8E8E93; margin-top: 4px;">Δ odczuwalna od 20°C bazowej</div>
+        <div class="val-title">📐 Koszt na 1 m² Lokalu ({APARTMENT_AREA_M2} m²)</div>
+        <div class="val-num" style="color: #007AFF; font-size: 24px;">{cost_per_m2_actual:.2f} zł / m²</div>
+        <div style="font-size: 12px; color: #8E8E93; margin-top: 4px;">Zaliczka SSM: <b>{ssm_advance_per_m2_to_date:.2f} zł/m²</b> (Oszczędność: {ssm_advance_per_m2_to_date - cost_per_m2_actual:+.2f} zł)</div>
     </div>
     """, unsafe_allow_html=True)
 
 with kpi_col3:
     st.markdown(f"""
     <div class="val-box" style="padding: 16px;">
-        <div class="val-title">🎯 Budżet Sezonowy SSM (774,53 zł / mc)</div>
-        <div class="val-num" style="color: #34C759; font-size: 22px;">{total_realtime_cost:.1f} / {season_budget_pln:.1f} zł</div>
+        <div class="val-title">🔮 Prognoza Końcowa Sezonu SSM</div>
+        <div class="val-num" style="color: {'#34C759' if ssm_projected_refund_or_extra >= 0 else '#FF3B30'}; font-size: 22px;">
+            {'ZWROT: +' if ssm_projected_refund_or_extra >= 0 else 'DOPŁATA: '}{ssm_projected_refund_or_extra:.2f} PLN
+        </div>
+        <div style="font-size: 12px; color: #8E8E93; margin-top: 4px;">Szacowany koszt 7 mc-y: <b>{ssm_projected_full_season_cost:.1f} zł</b> (Budżet: {SSM_ANNUAL_CO_BUDGET:.1f} zł)</div>
     </div>
     """, unsafe_allow_html=True)
-    st.progress(budget_progress_ratio, text=f"Wykorzystanie zaliczki spółdzielni: {budget_progress_ratio*100:.1f}% (Cel: optymalizacja i nadpłata)")
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# SIDEBAR: FORMULARZ RĘCZNEGO ODCZYTU + SYMULATOR "CO JEŚLI?" (+/-)
+# SIDEBAR: FORMULARZ + SYMULATOR + ROI + BUFOR BEZPIECZEŃSTWA
 # ---------------------------------------------------------
 with st.sidebar:
     st.header("📥 Nowy Odczyt (Ręczny)")
@@ -598,10 +617,9 @@ with st.sidebar:
             prev_val_end = val_end if not df_room_sonoff.empty else val_start
             delta_u = u_end - prev_val_end
             
-            # Poprawka: Rejestrujemy ewentualną anomalię / spadek wartości dla wpisów ręcznych
             if delta_u < 0:
                 delta_u = 0.0
-                notes = f"{notes} [Auto-korekta: wykryto ujemną deltę - spadek wartości]" if notes else "[Auto-korekta: wykryto ujemną deltę]"
+                notes = f"{notes} [Auto-korekta: ujemna delta]" if notes else "[Auto-korekta: ujemna delta]"
                 
             delta_g = gj_e - gj_s if gj_e > gj_s else 0.0
 
@@ -645,7 +663,7 @@ with st.sidebar:
                     st.success("Zapisano i zsynchronizowano pomyślnie!")
                     st.rerun()
 
-    # SYMULATOR OSZCZĘDNOŚCI / KOSZTÓW "CO JEŚLI?" (+/-)
+    # SYMULATOR OSZCZĘDNOŚCI
     st.markdown("---")
     st.header("🎛️ Symulator „Co jeśli?”")
     temp_change_slider = st.slider(
@@ -667,7 +685,24 @@ with st.sidebar:
     else:
         st.info("💡 Suwak w pozycji 0.0°C – brak zmian względem obecnego stanu.")
 
-    # Szybki przycisk cofania (Undo) w panelu bocznym
+    # WIDŻET ROI - ZWROT Z INWESTYCJI SONOFF
+    st.markdown("---")
+    st.header("💡 Zwrot z Inwestycji (ROI)")
+    HARDWARE_COST_EST = 550.0
+    df_base_sum = df[df["season"].str.contains("Bazowy", na=False)]["delta_units"].sum() if not df.empty else 0.0
+    total_saved_units = max(0.0, df_base_sum - total_apartment_units) if df_base_sum > 0 else 0.0
+    total_saved_pln = total_saved_units * EST_PLN_PER_UNIT
+    
+    payback_ratio = min(1.0, total_saved_pln / HARDWARE_COST_EST) if HARDWARE_COST_EST > 0 else 1.0
+    st.caption(f"Koszt zakupu sprzętu Sonoff: **~{HARDWARE_COST_EST:.0f} PLN**")
+    st.progress(payback_ratio, text=f"Spłacono: {total_saved_pln:.2f} PLN ({payback_ratio*100:.1f}%)")
+
+    # WSKAŹNIK BUFORA BEZPIECZEŃSTWA
+    weekly_avg_cost = total_realtime_cost / weeks_logged_count if weeks_logged_count > 0 else 1.0
+    buffer_weeks = max(0.0, ssm_net_balance_to_date / weekly_avg_cost) if weekly_avg_cost > 0 else 0.0
+    st.caption(f"🛡️ Bufor bezpiecznego grzania z zaliczek: **{buffer_weeks:.1f} tyg.**")
+
+    # Undo
     if not df.empty:
         st.markdown("---")
         if st.button("↩️ Cofnij ostatni wpis w bazie", use_container_width=True):
@@ -697,37 +732,50 @@ tab_charts, tab_season_comp, tab_analytics, tab_ai_pred, tab_history = st.tabs([
 ])
 
 with tab_charts:
-    st.markdown(f"#### Korelacja Zużycia ΔU oraz Temperatury Zewnętrznej dla: {current_room}")
+    if current_room == "Licznik Główny":
+        st.markdown("#### Korelacja Zużycia Licznika Głównego (Suma Stref [U] oraz Energia [GJ])")
+    else:
+        st.markdown(f"#### Korelacja Zużycia ΔU oraz Temperatury Zewnętrznej dla: **{current_room}**")
+        
     if not df_room.empty:
         fig_dual = px_go.Figure()
+        has_gj = (df_room["delta_gj"].sum() > 0)
+        
         fig_dual.add_trace(px_go.Bar(
-            x=df_room["period_label"], y=df_room["delta_units"], name="Zużycie [U]", marker_color="#007AFF"
+            x=df_room["period_label"], y=df_room["delta_units"], name="Zużycie Strefy [U]" if current_room != "Licznik Główny" else "Suma Wszystkich Pokoi [U]", marker_color="#007AFF"
         ))
-        fig_dual.add_trace(px_go.Scatter(
-            x=df_room["period_label"], y=df_room["temp_zewnetrzna"], name="Temp. Zewn. [°C]", mode="lines+markers", yaxis="y2", line=dict(color="#FF9500", width=3)
-        ))
+        
+        if current_room == "Licznik Główny" and has_gj:
+            fig_dual.add_trace(px_go.Scatter(
+                x=df_room["period_label"], y=df_room["delta_gj"], name="Energia Cieplna [GJ]", mode="lines+markers", yaxis="y2", line=dict(color="#FF3B30", width=3)
+            ))
+            y2_title = "Ciepło Główna [GJ]"
+        else:
+            fig_dual.add_trace(px_go.Scatter(
+                x=df_room["period_label"], y=df_room["temp_zewnetrzna"], name="Temp. Zewn. [°C]", mode="lines+markers", yaxis="y2", line=dict(color="#FF9500", width=3)
+            ))
+            y2_title = "Temperatura [°C]"
+
         fig_dual.update_layout(
-            template="plotly_white",
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            yaxis=dict(title="Zużycie [U]"),
-            yaxis2=dict(title="Temperatura [°C]", overlaying="y", side="right"),
-            height=360,
-            legend=dict(orientation="h", y=1.1, x=0.3)
+            template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+            yaxis=dict(title="Zużycie [Jednostki U]"), yaxis2=dict(title=y2_title, overlaying="y", side="right"),
+            height=360, legend=dict(orientation="h", y=1.1, x=0.2)
         )
         st.plotly_chart(fig_dual, use_container_width=True)
     else:
         st.info("Brak danych dla wybranego pokoju.")
 
     st.markdown("---")
-    st.markdown("#### 🏗️ Struktura Zużycia w Całym Mieszkaniu (Wykres Skumulowany)")
+    st.markdown("#### 🏗️ Struktura Zużycia w Całym Mieszkaniu (Wykres Skumulowany Pokoi)")
+    st.caption("Wyjaśnienie: Wykres przedstawia tygodniowy udział każdego pokoju. Ich łączna wysokość daje pełny wynik Licznika Głównego.")
+    
     if not df.empty:
-        df_stack = df[df["season"].str.contains("Sonoff", na=False)]
+        df_stack = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")]
         if not df_stack.empty:
             fig_stack = px.bar(
                 df_stack, x="period_label", y="delta_units", color="room_name",
-                title="Udział poszczególnych stref w tygodniowym zużyciu mieszkania",
-                labels={"period_label": "Okres", "delta_units": "Zużycie [U]", "room_name": "Strefa"},
+                title="Suma zużycia w podziale na strefy (Salon + Sypialnia + Pokój Dziecka)",
+                labels={"period_label": "Tydzień", "delta_units": "Zużycie [U]", "room_name": "Strefa"},
                 barmode="stack"
             )
             fig_stack.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=380)
@@ -736,38 +784,132 @@ with tab_charts:
             st.info("Brak danych skumulowanych dla sezonu Sonoff.")
 
 with tab_season_comp:
-    st.markdown("### 📊 Porównanie Sezonowe i Koszt Narastający (Cumulative)")
+    st.markdown("### 📊 Porównanie Sezonów, Koszt Narastający & Linie Zaliczek SSM")
+    st.caption("Wyjaśnienie: Linia przerywana przedstawia zgromadzone wpłaty zaliczek do Spółdzielni. Przebieg zużycia poniżej tej linii oznacza bezpośredni zwrot gotówki.")
+    
     if not df.empty:
         col_sc1, col_sc2 = st.columns(2)
         with col_sc1:
-            df_comp = df.groupby(["week_num", "season"])["delta_units"].sum().reset_index()
+            df_comp = df[df["room_name"] != "Licznik Główny"].groupby(["week_num", "season"])["delta_units"].sum().reset_index()
             fig_season = px.line(
                 df_comp, x="week_num", y="delta_units", color="season",
-                markers=True, title="Zużycie w podziale na tygodnie roku",
-                labels={"week_num": "Tydzień Roku", "delta_units": "Zużycie [U]", "season": "Sezon"}
+                markers=True, title="Zużycie tygodniowe: Obecny Sezon vs Bazowy",
+                labels={"week_num": "Tydzień Roku", "delta_units": "Suma Mieszkania [U]", "season": "Sezon"}
             )
             fig_season.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=360)
             st.plotly_chart(fig_season, use_container_width=True)
 
         with col_sc2:
-            df_cum = df.groupby(["season", "week_num"])["delta_units"].sum().groupby(level=0).cumsum().reset_index()
+            df_cum = df[df["room_name"] != "Licznik Główny"].groupby(["season", "week_num"])["delta_units"].sum().groupby(level=0).cumsum().reset_index()
             df_cum["cumulative_pln"] = df_cum["delta_units"] * EST_PLN_PER_UNIT
-            fig_cum = px.line(
-                df_cum, x="week_num", y="cumulative_pln", color="season",
-                markers=True, title="Narastające wydatki PLN w sezonie (Cumulative Cost)",
-                labels={"week_num": "Tydzień Roku", "cumulative_pln": "Koszt Narastający [PLN]", "season": "Sezon"}
+            
+            fig_cum = px_go.Figure()
+            for season_name in df_cum["season"].unique():
+                sub_df = df_cum[df_cum["season"] == season_name]
+                fig_cum.add_trace(px_go.Scatter(
+                    x=sub_df["week_num"], y=sub_df["cumulative_pln"], name=season_name, mode="lines+markers"
+                ))
+            
+            # Linia zaliczek SSM
+            weeks_seq = list(df_cum["week_num"].unique())
+            ssm_advances_line = [(w / SSM_TOTAL_WEEKS) * SSM_ANNUAL_CO_BUDGET for w in weeks_seq]
+            fig_cum.add_trace(px_go.Scatter(
+                x=weeks_seq, y=ssm_advances_line, name="💰 Skumulowane Wpłaty Zaliczek SSM",
+                line=dict(color="#34C759", width=3, dash="dash")
+            ))
+
+            fig_cum.update_layout(
+                title="Skumulowany Koszt vs Wpłacone Zaliczki SSM [PLN]",
+                xaxis_title="Tydzień Roku", yaxis_title="Koszt Narastający [PLN]",
+                template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=360
             )
-            fig_cum.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=360)
             st.plotly_chart(fig_cum, use_container_width=True)
+
+        # ---------------------------------------------------------
+        # NOWY INTERAKTYWNY WYKRES: KOSZTY CO VS OPŁATY CAŁKOWITE (CZYNSZ SSM)
+        # ---------------------------------------------------------
+        st.markdown("---")
+        st.markdown("#### 🏢 Struktura Opłat Całkowitych (Czynsz SSM vs Rzeczywisty Koszt CO)")
+        st.caption(f"Porównanie miesięczne opłat stałych (eksploatacja, woda, fundusz: **{SSM_NON_HEATING_RENT:.2f} PLN**), zaliczki na CO (**{SSM_CO_MONTHLY_ADVANCE:.2f} PLN**) oraz **rzeczywistego poboru ciepła Sonoff**.")
+
+        # Wyliczenia do interaktywnego wykresu opłat całkowitych
+        weeks_in_data = sorted(df_sonoff_all["week_num"].unique()) if not df_sonoff_all.empty else [37]
+        
+        chart_data_rent = []
+        for w in weeks_in_data:
+            w_units = df_sonoff_all[df_sonoff_all["week_num"] == w]["delta_units"].sum() if not df_sonoff_all.empty else 0.0
+            w_co_cost_real = w_units * EST_PLN_PER_UNIT
+            w_co_advance = SSM_CO_MONTHLY_ADVANCE / 4.28 # Przelicznik tygodniowy
+            w_fixed_rent = SSM_NON_HEATING_RENT / 4.28
+            w_total_rent_advance = w_fixed_rent + w_co_advance
+            w_total_rent_actual = w_fixed_rent + w_co_cost_real
+            
+            chart_data_rent.append({
+                "Tydzień": f"Tydzień {w}",
+                "Opłaty Stałe (Czynsz bez CO)": round(w_fixed_rent, 2),
+                "Zaliczka CO (SSM)": round(w_co_advance, 2),
+                "Rzeczywiste CO (Sonoff)": round(w_co_cost_real, 2),
+                "Czynsz Całkowity z Zaliczką": round(w_total_rent_advance, 2),
+                "Rzeczywisty Czynsz z Sonoff": round(w_total_rent_actual, 2),
+                "Udział CO w Czynszu (%)": round((w_co_cost_real / w_total_rent_actual * 100) if w_total_rent_actual > 0 else 0, 1)
+            })
+
+        df_rent_chart = pd.DataFrame(chart_data_rent)
+
+        col_r1, col_r2 = st.columns([2, 1])
+        with col_r1:
+            fig_total_fees = px_go.Figure()
+            
+            # Słupki skumulowane: Opłaty stałe + Realne CO
+            fig_total_fees.add_trace(px_go.Bar(
+                x=df_rent_chart["Tydzień"], y=df_rent_chart["Opłaty Stałe (Czynsz bez CO)"],
+                name="Opłaty Stałe SSM (Eksploatacja/Woda)", marker_color="#8E8E93"
+            ))
+            fig_total_fees.add_trace(px_go.Bar(
+                x=df_rent_chart["Tydzień"], y=df_rent_chart["Rzeczywiste CO (Sonoff)"],
+                name="Rzeczywisty Koszt CO (Sonoff)", marker_color="#007AFF"
+            ))
+            
+            # Linia poziomu pobieranego czynszu z zaliczką SSM
+            fig_total_fees.add_trace(px_go.Scatter(
+                x=df_rent_chart["Tydzień"], y=df_rent_chart["Czynsz Całkowity z Zaliczką"],
+                name="Wpłacany Czynsz Całkowity (z Zaliczką CO)", mode="lines+markers",
+                line=dict(color="#FF9500", width=3, dash="dash")
+            ))
+
+            fig_total_fees.update_layout(
+                barmode="stack",
+                title="Tygodniowy Czynsz Rzeczywisty vs Wpłacany do Spółdzielni [PLN]",
+                xaxis_title="Tydzień", yaxis_title="Kwota PLN",
+                template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
+                height=340, legend=dict(orientation="h", y=1.15, x=0.0)
+            )
+            st.plotly_chart(fig_total_fees, use_container_width=True)
+
+        with col_r2:
+            # Wykres kołowy struktury całkowitego czynszu
+            avg_co_real = df_rent_chart["Rzeczywiste CO (Sonoff)"].mean() if not df_rent_chart.empty else 0.0
+            fixed_rent_weekly = SSM_NON_HEATING_RENT / 4.28
+            
+            fig_rent_pie = px.pie(
+                values=[fixed_rent_weekly, avg_co_real],
+                names=["Opłaty Stałe SSM", "Ogrzewanie CO (Sonoff)"],
+                hole=0.5,
+                title="Udział CO w Całkowitym Czynszu",
+                color_discrete_sequence=["#8E8E93", "#007AFF"]
+            )
+            fig_rent_pie.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=340)
+            st.plotly_chart(fig_rent_pie, use_container_width=True)
+
     else:
         st.info("Brak wystarczających danych do porównania sezonów.")
 
 with tab_analytics:
-    st.markdown("### 💸 Bilans Finansowy i Heatmapa Korelacji")
+    st.markdown("### 💸 Bilans Finansowy, Heatmapa oraz Analiza Trybów Grzania")
     
     if not df.empty:
-        df_sonoff = df[df["season"].str.contains("Sonoff", na=False)].copy()
-        df_base = df[df["season"].str.contains("Bazowy", na=False)].copy()
+        df_sonoff = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")].copy()
+        df_base = df[df["season"].str.contains("Bazowy", na=False) & (df["room_name"] != "Licznik Główny")].copy()
 
         df_weekly = df_sonoff.groupby(["week_num", "period_label"])["delta_units"].sum().reset_index()
         df_weekly_base = df_base.groupby(["week_num"])["delta_units"].sum().reset_index().rename(columns={"delta_units": "base_units"})
@@ -779,54 +921,103 @@ with tab_analytics:
 
         col_a, col_b = st.columns(2)
         with col_a:
+            st.markdown("#### 🟢 Tygodniowe Oszczędności PLN (Zielony = Zysk)")
             fig_bal = px_go.Figure()
             fig_bal.add_trace(px_go.Bar(
                 x=df_merged["period_label"], y=df_merged["pln_balance"],
                 marker_color=df_merged["color"], text=df_merged["pln_balance"].apply(lambda x: f"{x:.1f} zł"), textposition="outside"
             ))
-            fig_bal.update_layout(title="Tygodniowy Bilans PLN względem zeszłego roku", template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=320)
+            fig_bal.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=320)
             st.plotly_chart(fig_bal, use_container_width=True)
 
         with col_b:
-            st.markdown("#### 🔥 Macierz Korelacji (Temperatura zewn. vs Zużycie)")
-            if len(df_sonoff) >= 2:
-                fig_heat = px.density_heatmap(
-                    df_sonoff, x="temp_zewnetrzna", y="delta_units", z="delta_units",
-                    histfunc="avg", title="Intensywność zużycia a temperatura zewnątrz",
-                    labels={"temp_zewnetrzna": "Temp. Zewnętrzna [°C]", "delta_units": "Średnie Zużycie [U]"}
+            st.markdown("#### 🍩 Podział Zużycia według Trybów Grzania (Tags)")
+            if not df_sonoff.empty:
+                df_mode_pie = df_sonoff.groupby("mode_tag")["delta_units"].sum().reset_index()
+                fig_pie = px.pie(
+                    df_mode_pie, values="delta_units", names="mode_tag", hole=0.45,
+                    title="Udział trybów pracy w łącznym zużyciu",
+                    color_discrete_sequence=["#007AFF", "#34C759", "#FF9500", "#AF52DE"]
                 )
-                fig_heat.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=320)
-                st.plotly_chart(fig_heat, use_container_width=True)
+                fig_pie.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=320)
+                st.plotly_chart(fig_pie, use_container_width=True)
             else:
-                st.info("Zbyt mało danych do wygenerowania heatmapy.")
+                st.info("Brak danych o trybach pracy.")
+
+        st.markdown("---")
+        st.markdown("#### 🔥 Macierz Korelacji (Temperatura Zewnętrzna vs Zużycie Mieszkania)")
+        if len(df_sonoff) >= 2:
+            fig_heat = px.density_heatmap(
+                df_sonoff, x="temp_zewnetrzna", y="delta_units", z="delta_units",
+                histfunc="avg", title="Intensywność poboru energii w zależności od temperatury na zewnątrz",
+                labels={"temp_zewnetrzna": "Temp. Zewnętrzna [°C]", "delta_units": "Średnie Zużycie Strefy [U]"}
+            )
+            fig_heat.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300)
+            st.plotly_chart(fig_heat, use_container_width=True)
     else:
         st.info("Brak danych analitycznych.")
 
 with tab_ai_pred:
-    st.markdown("### 🤖 Predykcja AI i Szacowanie Miesięczne")
+    st.markdown("### 🤖 Predykcja AI, Wykrywanie Anomalii & Prędkościomierz Budżetowy SSM")
+    
+    # SILNIK ANOMALII
+    anomaly_detected = False
+    anomaly_msg = ""
+    if not df_room_sonoff.empty and len(df_room_sonoff) >= 2:
+        last_u = df_room_sonoff.iloc[-1]["delta_units"]
+        prev_u = df_room_sonoff.iloc[-2]["delta_units"]
+        last_temp = df_room_sonoff.iloc[-1]["temp_zewnetrzna"]
+        prev_temp = df_room_sonoff.iloc[-2]["temp_zewnetrzna"]
+        
+        if prev_u > 0 and (last_u - prev_u) / prev_u > 0.25 and last_temp >= prev_temp:
+            anomaly_detected = True
+            anomaly_msg = f"Wykryto skok zużycia w strefie {current_room} (+{((last_u-prev_u)/prev_u)*100:.1f}%) przy wyższej temp. zewn. ({last_temp}°C). Sprawdź wietrzenie lub nastawy."
+
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        st.info("💡 **Inteligentna Analiza i Harmonogram (Smart Scheduling):**\n\n"
-                f"- System wykrywa temperaturę w Bytkowie (`{live_outdoor_temp}°C`).\n"
-                "- Cel redukcji wydatków względem zaliczki spółdzielni realizowany jest pomyślnie.\n"
-                "- Brak gwałtownych anomalii skokowych w strefach.")
+        st.markdown("#### 🧠 Analiza Zachowania Systemu i Prognoza SSM")
+        if anomaly_detected:
+            st.error(f"⚠️ **Alert Inteligentnego Wykrywania Anomalii:**\n\n{anomaly_msg}")
+        else:
+            st.success("✅ **Stan Normalny (Brak Anomalii):**\n\nZużycie we wszystkich strefach jest stabilne i współgra z aktualną pogodą w Bytkowie.")
+            
+        st.info("💡 **Szczegółowy Raport Rozliczeniowy ze Spółdzielnią:**\n\n"
+                f"- Łączny budżet zaliczkowy CO na ten sezon wynosi **{SSM_ANNUAL_CO_BUDGET:.2f} PLN**.\n"
+                f"- Przy aktualnym tempie całkowity koszt wyniesie **~{ssm_projected_full_season_cost:.2f} PLN**.\n"
+                f"- Przewidywany wynik końcowy rozliczenia z SSM: **{'ZWROT +' if ssm_projected_refund_or_extra>=0 else 'DOPŁATA '}{ssm_projected_refund_or_extra:.2f} PLN**.")
+                
     with col_p2:
-        est_monthly_units = total_delta_room * 4.2
-        est_monthly_cost = est_monthly_units * EST_PLN_PER_UNIT
-        st.markdown(f"""
-        <div style="background: rgba(0, 122, 255, 0.08); border-radius: 16px; padding: 18px; border: 1px solid rgba(0, 122, 255, 0.25);">
-            <h4 style="margin: 0; color: #007AFF;">Prognoza na koniec miesiąca</h4>
-            <p style="margin: 8px 0 0 0; font-size: 15px;">Przewidywane zużycie dla strefy <b>{current_room}</b>: <b>{est_monthly_units:.1f} U</b></p>
-            <p style="margin: 4px 0 0 0; font-size: 15px;">Szacowany koszt: <b>{est_monthly_cost:.2f} PLN</b></p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("#### ⏱️ Prędkościomierz Wykorzystania Zaliczki SSM")
+        fig_gauge = px_go.Figure(px_go.Indicator(
+            mode="gauge+number+delta",
+            value=total_realtime_cost,
+            domain={'x': [0, 1], 'y': [0, 1]},
+            title={'text': "Zużycie Budżetu CO (PLN)", 'font': {'size': 16}},
+            delta={'reference': ssm_paid_advances_to_date, 'increasing': {'color': "red"}},
+            gauge={
+                'axis': {'range': [None, SSM_ANNUAL_CO_BUDGET], 'tickwidth': 1, 'tickcolor': "darkblue"},
+                'bar': {'color': "#007AFF"},
+                'bgcolor': "white",
+                'borderwidth': 2,
+                'bordercolor': "gray",
+                'steps': [
+                    {'range': [0, SSM_ANNUAL_CO_BUDGET*0.6], 'color': 'rgba(52, 199, 89, 0.2)'},
+                    {'range': [SSM_ANNUAL_CO_BUDGET*0.6, SSM_ANNUAL_CO_BUDGET*0.9], 'color': 'rgba(255, 149, 0, 0.2)'},
+                    {'range': [SSM_ANNUAL_CO_BUDGET*0.9, SSM_ANNUAL_CO_BUDGET], 'color': 'rgba(255, 59, 48, 0.2)'}
+                ]
+            }
+        ))
+        fig_gauge.update_layout(height=280, margin=dict(l=20, r=20, t=30, b=20))
+        st.plotly_chart(fig_gauge, use_container_width=True)
 
 with tab_history:
     st.markdown("### 📋 Zarządzanie i Historia Wpisów (Edycja / Usuwanie)")
+    st.caption("Wyjaśnienie: Zbiór wszystkich wtorkowych odczytów zebranych z podzielników oraz licznika głównego.")
+    
     if df.empty:
         st.info("Baza danych jest pusta.")
     else:
-        st.write("Możesz zaznaczyć wiersze w kolumnie **Zaznacz**, aby je usunąć, lub pobrać całą bazę do pliku CSV.")
+        st.write("Zaznacz wiersze w kolumnie **Zaznacz**, aby je usunąć, lub pobierz historię do pliku CSV.")
         
         df_editable = df.copy()
         if "Zaznacz" not in df_editable.columns:
@@ -841,7 +1032,7 @@ with tab_history:
 
         col_h1, col_h2 = st.columns(2)
         with col_h1:
-            if st.button("🗑️ Usuń zaznaczone wiersze z terytorium bazy", type="primary"):
+            if st.button("🗑️ Usuń zaznaczone wiersze z bazy", type="primary"):
                 rows_to_keep = edited_table[edited_table["Zaznacz"] == False]
                 rows_to_keep = rows_to_keep.drop(columns=["Zaznacz"])
                 save_data(rows_to_keep, "Usunięto wybrane wiersze z tabeli")
