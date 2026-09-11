@@ -8,29 +8,114 @@ import os
 from datetime import date
 
 # ---------------------------------------------------------
-# KONFIGURACJA STRONY STREAMLIT
+# KONFIGURACJA STRONY
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Zarządzanie Ogrzewaniem - Sonoff (od 10.2026)",
+    page_title="Zużycie Ogrzewania Sonoff - iOS Style",
     page_icon="🔥",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 FILE_PATH = "data/consumption.csv"
 
 # ---------------------------------------------------------
-# SŁOWNIKI I MAPOWANIE POKOI
+# STYLIZACJA W STYLU iOS (APPLE DESIGN SYSTEM)
+# ---------------------------------------------------------
+st.markdown("""
+    <style>
+    /* Czcionka i tło w stylu iOS */
+    html, body, [class*="css"] {
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    
+    .main {
+        background-color: #F2F2F7;
+    }
+    
+    /* Karty iOS z efektami glassmorphism */
+    div[data-testid="stMetric"], .ios-card {
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 18px;
+        padding: 16px 20px;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+        margin-bottom: 12px;
+    }
+    
+    /* Metryki iOS */
+    [data-testid="stMetricValue"] {
+        font-size: 28px !important;
+        font-weight: 700 !important;
+        color: #1C1C1E !important;
+    }
+    
+    [data-testid="stMetricLabel"] {
+        font-size: 13px !important;
+        font-weight: 600 !important;
+        color: #8E8E93 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    /* Paski postępu iOS */
+    .stProgress > div > div > div > div {
+        background-color: #007AFF !important;
+        border-radius: 10px;
+    }
+    
+    /* Stylizacja zakładek Tabs iOS */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background-color: #E5E5EA;
+        padding: 5px;
+        border-radius: 14px;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        height: 38px;
+        border-radius: 10px;
+        background-color: transparent;
+        border: none;
+        color: #3A3A3C;
+        font-weight: 600;
+        font-size: 14px;
+    }
+
+    .stTabs [aria-selected="true"] {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    }
+    
+    /* iOS Alert Box */
+    .ios-alert {
+        background-color: #FFF2F2;
+        border-left: 5px solid #FF3B30;
+        padding: 12px 16px;
+        border-radius: 12px;
+        color: #D70015;
+        font-weight: 500;
+        margin-bottom: 15px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# ---------------------------------------------------------
+# SŁOWNIKI I KONFIGURACJA POKOI / OKRESÓW
 # ---------------------------------------------------------
 ROOMS_CONFIG = {
-    "Salon": {"icon": "🛋️", "desc": "Główna strefa dzienna"},
-    "Sypialnia": {"icon": "🛏️", "desc": "Strefa nocna"},
-    "Kuchnia": {"icon": "🍳", "desc": "Strefa kuchenna"},
-    "Pokój Dziecka": {"icon": "🧒", "desc": "Strefa dziecięca"},
-    "Łazienka": {"icon": "🛁", "desc": "Strefa sanitarna"},
-    "Licznik Główny": {"icon": "🏢", "desc": "Ciepłomierze / Cały budynek"}
+    "Salon": {"icon": "🛋️", "desc": "Główny kaloryfer w salonie"},
+    "Sypialnia": {"icon": "🛏️", "desc": "Kaloryfer w sypialni"},
+    "Pokój Dziecka": {"icon": "🧒", "desc": "Kaloryfer w pokoju dziecka"},
+    "Licznik Główny": {"icon": "🏢", "desc": "Główny ciepłomierz (GJ)"}
 }
 
 PERIODS = {
+    "09-1": "Wrzesień I (1-15)",
+    "09-2": "Wrzesień II (16-30)",
     "10-1": "Październik I (1-15)",
     "10-2": "Październik II (16-31)",
     "11-1": "Listopad I (1-15)",
@@ -47,19 +132,17 @@ PERIODS = {
     "04-2": "Kwiecień II (16-30)"
 }
 
-SEASONS = ["2025/2026 (Bazowy)", "2026/2027 (Sonoff od 10.2026)"]
+SEASONS = ["2025/2026 (Bazowy)", "2026/2027 (Sonoff od 09.2026)"]
 
 # ---------------------------------------------------------
-# OBSŁUGA BAZY DANYCH I INTEGRACJA Z GITHUB
+# OBSŁUGA BAZY DANYCH
 # ---------------------------------------------------------
 def get_github_repo():
-    """Bezpieczne pobieranie repozytorium z GitHub z obsługą błędów."""
     try:
         github_config = st.secrets.get("github", {})
         token = github_config.get("token")
         repo_name = github_config.get("repo")
-        
-        if token and repo_name and len(token.strip()) > 0 and len(repo_name.strip()) > 0:
+        if token and repo_name:
             g = Github(token)
             return g.get_repo(repo_name)
     except Exception:
@@ -67,16 +150,13 @@ def get_github_repo():
     return None
 
 def create_empty_df():
-    """Tworzenie pustej struktury DataFrame z obsługą nr licznika, jednostek U i GJ."""
     return pd.DataFrame(columns=[
         "id", "season", "period_code", "period_label", "date_entry",
         "room_name", "meter_number", "units_start", "units_end", "delta_units",
-        "gj_start", "gj_end", "delta_gj", "hdd", "sgi", "sgi_gj",
-        "cost_per_gj", "notes"
+        "gj_start", "gj_end", "delta_gj", "cost_per_gj", "target_limit", "notes"
     ])
 
 def load_data():
-    """Ładowanie danych z GitHub lub lokalnego pliku fallback z migracją kolumn."""
     repo = get_github_repo()
     branch = st.secrets.get("github", {}).get("branch", "main")
     
@@ -86,23 +166,15 @@ def load_data():
             file_content = repo.get_contents(FILE_PATH, ref=branch)
             csv_raw = file_content.decoded_content.decode('utf-8')
             df = pd.read_csv(io.StringIO(csv_raw))
-        except GithubException as e:
-            if e.status == 404:
-                df = create_empty_df()
-                save_data(df, commit_message="Inicjalizacja pliku data/consumption.csv")
-            else:
-                st.warning(f"Brak dostępu do GitHub (Kod HTTP {e.status}). Przełączono w tryb lokalny.")
-                df = load_local_fallback()
         except Exception:
             df = load_local_fallback()
     else:
         df = load_local_fallback()
 
-    # Zapewnienie wstecznej kompatybilności dla nowych kolumn (np. meter_number)
     required_cols = create_empty_df().columns
     for col in required_cols:
         if col not in df.columns:
-            if col in ["gj_start", "gj_end", "delta_gj", "sgi_gj", "cost_per_gj"]:
+            if col in ["gj_start", "gj_end", "delta_gj", "cost_per_gj", "target_limit"]:
                 df[col] = 0.0
             elif col == "meter_number":
                 df[col] = "—"
@@ -111,7 +183,6 @@ def load_data():
     return df
 
 def load_local_fallback():
-    """Wczytywanie z lokalnego pliku na dysku."""
     if os.path.exists(FILE_PATH):
         try:
             return pd.read_csv(FILE_PATH)
@@ -123,8 +194,7 @@ def load_local_fallback():
         df.to_csv(FILE_PATH, index=False)
         return df
 
-def save_data(df, commit_message="Aktualizacja odczytów zużycia ciepła"):
-    """Zapisywanie danych do GitHub (auto-commit) lub na dysk lokalny."""
+def save_data(df, commit_message="Aktualizacja odczytu"):
     repo = get_github_repo()
     branch = st.secrets.get("github", {}).get("branch", "main")
     
@@ -136,394 +206,250 @@ def save_data(df, commit_message="Aktualizacja odczytów zużycia ciepła"):
         try:
             try:
                 file_content = repo.get_contents(FILE_PATH, ref=branch)
-                repo.update_file(
-                    path=FILE_PATH,
-                    message=commit_message,
-                    content=csv_string,
-                    sha=file_content.sha,
-                    branch=branch
-                )
+                repo.update_file(FILE_PATH, commit_message, csv_string, file_content.sha, branch=branch)
             except GithubException as e:
                 if e.status == 404:
-                    repo.create_file(
-                        path=FILE_PATH,
-                        message=commit_message,
-                        content=csv_string,
-                        branch=branch
-                    )
-                else:
-                    raise e
+                    repo.create_file(FILE_PATH, commit_message, csv_string, branch=branch)
             return True
-        except Exception as e:
-            st.error(f"Nie udało się zapisać danych na GitHubie: {e}")
+        except Exception:
             return False
     else:
         os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
         df.to_csv(FILE_PATH, index=False)
-        st.info("Zapisano lokalnie.")
         return True
 
 # ---------------------------------------------------------
-# STAN APLIKACJI & GRAFICZNY WYBÓR POKOJU
+# INTERFEJS GŁÓWNY I KAFELKI iOS
 # ---------------------------------------------------------
 df = load_data()
 
 if "selected_room" not in st.session_state:
     st.session_state["selected_room"] = "Salon"
 
-st.title("🔥 System Analizy Ogrzewania: Głowice Sonoff vs Sezon Ubiegły")
-st.caption("Porównanie zużycia ciepła od Października 2026 (z głowicami smart Sonoff) z zeszłorocznym bazowym sezonem 2025/2026.")
+st.title("🔥 Ogrzewanie Sonoff")
+st.caption("Monitoring zużycia z kaloryferów od Września 2026 w porównaniu do zeszłego sezonu.")
 
-st.markdown("### 🏠 Wybierz Pokój / Licznik")
-
-# Graficzne kafelki wyboru pomieszczenia
+# Kafelki iOS
+st.markdown("##### 📍 Wybierz Pokój")
 cols = st.columns(len(ROOMS_CONFIG))
 for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
     is_active = (st.session_state["selected_room"] == room_key)
-    button_label = f"{info['icon']} {room_key}"
-    if is_active:
-        button_label = f"✅ {room_key}"
+    btn_type = "primary" if is_active else "secondary"
     
     with cols[idx]:
-        if st.button(
-            button_label, 
-            key=f"btn_room_{room_key}", 
-            use_container_width=True,
-            type="primary" if is_active else "secondary"
-        ):
+        if st.button(f"{info['icon']} {room_key}", key=f"btn_{room_key}", use_container_width=True, type=btn_type):
             st.session_state["selected_room"] = room_key
             st.rerun()
 
 current_room = st.session_state["selected_room"]
 
-st.info(f"Wybrany obszar: **{ROOMS_CONFIG[current_room]['icon']} {current_room}** — {ROOMS_CONFIG[current_room]['desc']}")
-
-st.divider()
-
 # ---------------------------------------------------------
-# FORMULARZ WPROWADZANIA ODCZYTÓW & NUMER LICZNIKA
+# SIDEBAR - WPROWADZANIE DANYCH
 # ---------------------------------------------------------
 with st.sidebar:
     st.header(f"📥 Odczyt: {ROOMS_CONFIG[current_room]['icon']} {current_room}")
     
     with st.form("entry_form", clear_on_submit=False):
         season = st.selectbox("Sezon grzewczy", SEASONS, index=1)
-        period_code = st.selectbox("Okres rozliczeniowy", list(PERIODS.keys()), format_func=lambda x: PERIODS[x])
+        period_code = st.selectbox("Okres (od Września)", list(PERIODS.keys()), format_func=lambda x: PERIODS[x])
         
         st.markdown("---")
-        st.subheader("🔢 Identyfikator Licznika")
-        meter_number = st.text_input(
-            "Numer licznika / podzielnika", 
-            value=f"POD-{current_room.upper()[:3]}-01" if current_room != "Licznik Główny" else "GJ-MAIN-2026",
-            help="Podaj ciąg cyfr lub oznaczenie nadrukowane na podzielniku / ciepłomierzu."
-        )
-
+        meter_number = st.text_input("Numer licznika / podzielnika", value=f"POD-{current_room[:3].upper()}-2026")
+        
         st.markdown("---")
-        st.subheader("1. Odczyt Podzielnika (Jednostki U)")
+        st.subheader("1. Podzielnik (Jednostki U)")
         col_u1, col_u2 = st.columns(2)
-        units_start = col_u1.number_input("Stan początkowy", min_value=0.0, value=0.0, step=1.0)
-        units_end = col_u2.number_input("Stan końcowy", min_value=0.0, value=0.0, step=1.0)
-        
+        units_start = col_u1.number_input("Początek", min_value=0.0, value=0.0, step=1.0)
+        units_end = col_u2.number_input("Koniec", min_value=0.0, value=0.0, step=1.0)
         manual_delta_u = st.number_input("Lub zużycie bezpośrednie (ΔU)", min_value=0.0, value=0.0, step=1.0)
 
         st.markdown("---")
-        st.subheader("2. Odczyt Ciepłomierza Głównego (GJ)")
-        col_gj1, col_gj2 = st.columns(2)
-        gj_start = col_gj1.number_input("GJ początek", min_value=0.0, value=0.0, step=0.01, format="%.2f")
-        gj_end = col_gj2.number_input("GJ koniec", min_value=0.0, value=0.0, step=0.01, format="%.2f")
-        
-        manual_delta_gj = st.number_input("Lub zużycie w GJ (ΔGJ)", min_value=0.0, value=0.0, step=0.01, format="%.2f")
+        st.subheader("2. Licznik Główny (GJ)")
+        col_g1, col_g2 = st.columns(2)
+        gj_start = col_g1.number_input("GJ początek", min_value=0.0, value=0.0, step=0.01)
+        gj_end = col_g2.number_input("GJ koniec", min_value=0.0, value=0.0, step=0.01)
+        manual_delta_gj = st.number_input("Lub zużycie w GJ (ΔGJ)", min_value=0.0, value=0.0, step=0.01)
 
         st.markdown("---")
-        st.subheader("3. Pogoda i Finanse")
-        hdd_input = st.number_input("Stopniodni (HDD)", min_value=0.1, value=150.0, step=0.1,
-                                    help="Suma HDD z Państwowej Stacji Meteo dla minionego okresu 2 tygodni.")
+        st.subheader("3. Ustawienia i Cel")
+        target_limit = st.number_input("Cel / Limit jednostek dla pokoju", min_value=0.0, value=100.0, step=10.0, help="Docelowe maks. zużycie w 2 tygodnie")
         cost_per_gj = st.number_input("Cena za 1 GJ (PLN)", min_value=0.0, value=105.0, step=1.0)
-        date_entry = st.date_input("Data spisania odczytu", date.today())
-        notes = st.text_input("Uwagi (np. temp. zadana w Sonoff)", value="Nastawa 20.5°C")
+        date_entry = st.date_input("Data odczytu", date.today())
+        notes = st.text_input("Uwagi / Nastawa głowicy", value="Harmonogram Sonoff 20.0°C")
 
-        submitted = st.form_submit_button("💾 Zapisz Odczyt w Bazie")
+        submitted = st.form_submit_button("💾 Zapisz Odczyt")
 
         if submitted:
-            # Obliczenie zużycia ΔU
-            if (units_end > units_start) and (manual_delta_u == 0):
-                delta_units = units_end - units_start
-            else:
-                delta_units = manual_delta_u
-
-            # Obliczenie zużycia ΔGJ
-            if (gj_end > gj_start) and (manual_delta_gj == 0):
-                delta_gj = gj_end - gj_start
-            else:
-                delta_gj = manual_delta_gj
+            delta_units = (units_end - units_start) if (units_end > units_start and manual_delta_u == 0) else manual_delta_u
+            delta_gj = (gj_end - gj_start) if (gj_end > gj_start and manual_delta_gj == 0) else manual_delta_gj
 
             if delta_units <= 0 and delta_gj <= 0:
-                st.error("Wprowadź poprawne zużycie (ΔU > 0 lub ΔGJ > 0)!")
+                st.error("Podaj poprawne zużycie (ΔU > 0 lub ΔGJ > 0)!")
             else:
-                sgi_u = round(delta_units / hdd_input, 4) if hdd_input > 0 else 0.0
-                sgi_gj = round(delta_gj / hdd_input, 6) if hdd_input > 0 else 0.0
-
-                # Nadpisanie dubla dla danego sezonu, okresu i pokoju
                 if not df.empty:
-                    df = df[~((df["season"] == season) & 
-                              (df["period_code"] == period_code) & 
-                              (df["room_name"] == current_room))]
+                    df = df[~((df["season"] == season) & (df["period_code"] == period_code) & (df["room_name"] == current_room))]
 
                 next_id = int(df["id"].max() + 1) if not df.empty and pd.notna(df["id"].max()) else 1
 
                 new_row = pd.DataFrame([{
-                    "id": next_id,
-                    "season": season,
-                    "period_code": period_code,
-                    "period_label": PERIODS[period_code],
-                    "date_entry": str(date_entry),
-                    "room_name": current_room,
-                    "meter_number": meter_number,
-                    "units_start": units_start,
-                    "units_end": units_end,
-                    "delta_units": delta_units,
-                    "gj_start": gj_start,
-                    "gj_end": gj_end,
-                    "delta_gj": delta_gj,
-                    "hdd": hdd_input,
-                    "sgi": sgi_u,
-                    "sgi_gj": sgi_gj,
-                    "cost_per_gj": cost_per_gj,
-                    "notes": notes
+                    "id": next_id, "season": season, "period_code": period_code,
+                    "period_label": PERIODS[period_code], "date_entry": str(date_entry),
+                    "room_name": current_room, "meter_number": meter_number,
+                    "units_start": units_start, "units_end": units_end, "delta_units": delta_units,
+                    "gj_start": gj_start, "gj_end": gj_end, "delta_gj": delta_gj,
+                    "cost_per_gj": cost_per_gj, "target_limit": target_limit, "notes": notes
                 }])
 
                 df = pd.concat([df, new_row], ignore_index=True)
-                if save_data(df, commit_message=f"Odczyt {current_room} ({meter_number}): {season} - {PERIODS[period_code]}"):
-                    st.success("Wpis został pomyślnie zapisany!")
+                if save_data(df, commit_message=f"Wpis: {current_room} {period_code}"):
+                    st.success("Zapisano pomyślnie!")
                     st.rerun()
 
 # ---------------------------------------------------------
-# AUTOMATYCZNE WYKRESY I ANALIZA PORÓWNAWCZA
+# ANALIZA DANYCH I PRZYGOTOWANIE WSKAŹNIKÓW
 # ---------------------------------------------------------
-df_filtered = df[df["room_name"] == current_room].copy()
-
-# Sortowanie według kolejności chronologicznej okresów grzewczych
 period_order = list(PERIODS.keys())
-df_filtered["period_order"] = df_filtered["period_code"].map(lambda x: period_order.index(x) if x in period_order else 99)
-df_filtered = df_filtered.sort_values("period_order")
+df["period_order"] = df["period_code"].map(lambda x: period_order.index(x) if x in period_order else 99)
+
+df_filtered = df[df["room_name"] == current_room].sort_values("period_order")
 
 base_df = df_filtered[df_filtered["season"] == "2025/2026 (Bazowy)"]
-sonoff_df = df_filtered[df_filtered["season"] == "2026/2027 (Sonoff od 10.2026)"]
+sonoff_df = df_filtered[df_filtered["season"] == "2026/2027 (Sonoff od 09.2026)"]
 
-# Nagłówek KPI
-st.markdown(f"### 📊 Podsumowanie Efektywności: {ROOMS_CONFIG[current_room]['icon']} {current_room}")
+# Powiadomienia iOS Alert o nietypowym skoku zużycia
+if len(sonoff_df) >= 2:
+    last_u = sonoff_df.iloc[-1]["delta_units"]
+    prev_u = sonoff_df.iloc[-2]["delta_units"]
+    if prev_u > 0 and last_u > prev_u * 1.3:
+        st.markdown(
+            f"""<div class="ios-alert">
+            🚨 <b>iOS Alert: Wykryto nietypowy skok zużycia!</b><br>
+            W okresie <b>{sonoff_df.iloc[-1]['period_label']}</b> zużycie wzrosło o <b>{((last_u - prev_u)/prev_u)*100:.0f}%</b> w porównaniu do poprzedniego okresu. Sprawdź głowicę lub okna w pokoju.
+            </div>""", 
+            unsafe_allow_html=True
+        )
+
+# Metryki Główne
+st.markdown(f"### 📊 Podsumowanie: {ROOMS_CONFIG[current_room]['icon']} {current_room}")
 
 col1, col2, col3, col4 = st.columns(4)
 
-avg_sgi_base = base_df["sgi"].mean() if not base_df.empty else 0.0
-avg_sgi_sonoff = sonoff_df["sgi"].mean() if not sonoff_df.empty else 0.0
+total_u_base = base_df["delta_units"].sum() if not base_df.empty else 0.0
+total_u_sonoff = sonoff_df["delta_units"].sum() if not sonoff_df.empty else 0.0
 
-sgi_change = ((avg_sgi_base - avg_sgi_sonoff) / avg_sgi_base * 100) if avg_sgi_base > 0 and avg_sgi_sonoff > 0 else 0.0
+diff_u = total_u_base - total_u_sonoff
+pct_saved = ((total_u_base - total_u_sonoff) / total_u_base * 100) if total_u_base > 0 else 0.0
 
-# Porównanie zestawione okres po okresie
-merged_comp = pd.merge(
-    sonoff_df, base_df, 
-    on="period_code", 
-    suffixes=('_sonoff', '_base')
-)
+col1.metric("Suma ΔU (Sonoff 2026)", f"{total_u_sonoff:.0f} U")
+col2.metric("Suma ΔU (Poprzedni Sezon)", f"{total_u_base:.0f} U")
+col3.metric("Różnica Bezpośrednia", f"{diff_u:+.0f} U", delta=f"{pct_saved:+.1f}% zużycia" if pct_saved != 0 else None)
 
-if not merged_comp.empty:
-    merged_comp["expected_units"] = merged_comp["sgi_base"] * merged_comp["hdd_sonoff"]
-    merged_comp["units_saved"] = merged_comp["expected_units"] - merged_comp["delta_units_sonoff"]
-    total_u_saved = merged_comp["units_saved"].sum()
-
-    if "sgi_gj_base" in merged_comp.columns and "sgi_gj_sonoff" in merged_comp.columns:
-        merged_comp["expected_gj"] = merged_comp["sgi_gj_base"] * merged_comp["hdd_sonoff"]
-        merged_comp["gj_saved"] = merged_comp["expected_gj"] - merged_comp["delta_gj_sonoff"]
-        total_gj_saved = merged_comp["gj_saved"].sum()
-    else:
-        total_gj_saved = 0.0
-else:
-    total_u_saved = 0.0
-    total_gj_saved = 0.0
-
+# Wyliczenie szacunkowego kosztu na pokój z przelicznika U -> GJ
+total_gj_sonoff = sonoff_df["delta_gj"].sum() if not sonoff_df.empty else 0.0
 avg_cost_gj = df["cost_per_gj"].replace(0, pd.NA).dropna().mean()
 if pd.isna(avg_cost_gj) or avg_cost_gj == 0:
     avg_cost_gj = 105.0
 
-pln_saved = total_gj_saved * avg_cost_gj
+est_cost_pln = total_gj_sonoff * avg_cost_gj
+col4.metric("Szacowany Koszt Pokoju", f"{est_cost_pln:.2f} PLN")
 
-col1.metric(
-    "Średnie SGI (U / HDD)", 
-    f"{avg_sgi_sonoff:.3f}",
-    delta=f"{sgi_change:+.1f}% oszczędności" if sgi_change != 0 else None,
-    delta_color="normal" if sgi_change >= 0 else "inverse"
-)
-col2.metric("Oszczędność Energii", f"{total_gj_saved:+.2f} GJ")
-col3.metric("Zysk Finansowy", f"{pln_saved:+.2f} PLN")
-col4.metric("Zaoszczędzone Jednostki", f"{total_u_saved:+.1f} U")
+# 🎯 Target Activity Progress Bar (iOS Health Style)
+if not sonoff_df.empty and sonoff_df.iloc[-1]["target_limit"] > 0:
+    last_period_u = sonoff_df.iloc[-1]["delta_units"]
+    target_u = sonoff_df.iloc[-1]["target_limit"]
+    progress = min(last_period_u / target_u, 1.0)
+    
+    st.markdown(f"**🎯 Cel Zużycia w Ostatnim Okresie ({sonoff_df.iloc[-1]['period_label']}): {last_period_u:.0f} / {target_u:.0f} U**")
+    st.progress(progress)
 
 st.divider()
 
 # ---------------------------------------------------------
-# TABY I WYKRESY ZUŻYCIA (AUTOMATYCZNIE GENEROWANE)
+# WYKRESY I ZAKŁADKI
 # ---------------------------------------------------------
-tab_charts, tab_audit, tab_sim, tab_table = st.tabs([
-    "📈 Wykresy Porównawcze (Sonoff vs Bazowy)", 
-    "🔎 Audyt Licznika & Przelicznik", 
-    "💰 Symulacja Kosztów PLN", 
-    "📋 Pełna Tabela Wpisów"
+tab_charts, tab_breakdown, tab_audit, tab_table = st.tabs([
+    "📈 Wykresy Zużycia (Sonoff vs Bazowy)", 
+    "🍕 Struktura Mieszkania", 
+    "🔢 Licznik i Audyt", 
+    "📋 Tabela Wpisów"
 ])
 
 with tab_charts:
-    st.subheader("Automatyczne Wykresy Zużycia: Październik 2026 vs Zeszły Sezon")
+    st.markdown("#### Porównanie Zużycia Kaloryferów Okres po Okresie [Jednostki U]")
     
-    col_g1, col_g2 = st.columns(2)
-    
-    with col_g1:
-        st.markdown("#### Dynamiczne Wskaźniki $SGI = \\frac{\\Delta U}{\\text{HDD}}$")
-        fig_sgi = go.Figure()
-        
-        if not base_df.empty:
-            fig_sgi.add_trace(go.Bar(
-                x=base_df["period_label"], y=base_df["sgi"],
-                name="2025/2026 (Bez Sonoff)", marker_color="#95a5a6",
-                text=base_df["sgi"].apply(lambda x: f"{x:.3f}"), textposition='auto'
-            ))
-            
-        if not sonoff_df.empty:
-            fig_sgi.add_trace(go.Bar(
-                x=sonoff_df["period_label"], y=sonoff_df["sgi"],
-                name="2026/2027 (Sonoff od 10.2026)", marker_color="#2ecc71",
-                text=sonoff_df["sgi"].apply(lambda x: f"{x:.3f}"), textposition='auto'
-            ))
-            
-        fig_sgi.update_layout(
-            barmode='group', 
-            xaxis_title="Okres Rozliczeniowy", 
-            yaxis_title="SGI [Jednostki U / HDD]",
-            template="plotly_white"
-        )
-        st.plotly_chart(fig_sgi, use_container_width=True)
-
-    with col_g2:
-        st.markdown("#### Zużycie Energii Ciepłomierza $SGI_{\\text{GJ}} = \\frac{\\Delta \\text{GJ}}{\\text{HDD}}$")
-        fig_gj = go.Figure()
-        
-        if not base_df.empty and "sgi_gj" in base_df.columns:
-            fig_gj.add_trace(go.Bar(
-                x=base_df["period_label"], y=base_df["sgi_gj"],
-                name="2025/2026 (Bez Sonoff)", marker_color="#7f8c8d",
-                text=base_df["sgi_gj"].apply(lambda x: f"{x:.4f}"), textposition='auto'
-            ))
-            
-        if not sonoff_df.empty and "sgi_gj" in sonoff_df.columns:
-            fig_gj.add_trace(go.Bar(
-                x=sonoff_df["period_label"], y=sonoff_df["sgi_gj"],
-                name="2026/2027 (Sonoff od 10.2026)", marker_color="#3498db",
-                text=sonoff_df["sgi_gj"].apply(lambda x: f"{x:.4f}"), textposition='auto'
-            ))
-            
-        fig_gj.update_layout(
-            barmode='group', 
-            xaxis_title="Okres Rozliczeniowy", 
-            yaxis_title="SGI [GJ / HDD]",
-            template="plotly_white"
-        )
-        st.plotly_chart(fig_gj, use_container_width=True)
-
-    # Wykres skumulowanego zużycia
-    st.markdown("#### Kumulatywne Zużycie Jednostek w Sezonie")
-    fig_cum = go.Figure()
+    fig_u = go.Figure()
     if not base_df.empty:
-        base_df_sorted = base_df.sort_values("period_order")
-        fig_cum.add_trace(go.Scatter(
-            x=base_df_sorted["period_label"], y=base_df_sorted["delta_units"].cumsum(),
-            mode='lines+markers', name="Suma 2025/2026 (Bazowy)", line=dict(color="#e74c3c", width=3)
+        fig_u.add_trace(go.Bar(
+            x=base_df["period_label"], y=base_df["delta_units"],
+            name="2025/2026 (Bez Sonoff)", marker_color="#C7C7CC",
+            text=base_df["delta_units"].apply(lambda x: f"{x:.0f}"), textposition='auto'
         ))
     if not sonoff_df.empty:
-        sonoff_df_sorted = sonoff_df.sort_values("period_order")
-        fig_cum.add_trace(go.Scatter(
-            x=sonoff_df_sorted["period_label"], y=sonoff_df_sorted["delta_units"].cumsum(),
-            mode='lines+markers', name="Suma 2026/2027 (Sonoff)", line=dict(color="#27ae60", width=3)
+        fig_u.add_trace(go.Bar(
+            x=sonoff_df["period_label"], y=sonoff_df["delta_units"],
+            name="2026/2027 (Sonoff od 09.2026)", marker_color="#007AFF",
+            text=sonoff_df["delta_units"].apply(lambda x: f"{x:.0f}"), textposition='auto'
         ))
-    fig_cum.update_layout(xaxis_title="Okres", yaxis_title="Suma ΔU [Jednostki]", template="plotly_white")
+    fig_u.update_layout(
+        barmode='group', xaxis_title="Okres Rozliczeniowy (od Września)", 
+        yaxis_title="Zużycie [Jednostki U]", template="plotly_white",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    st.plotly_chart(fig_u, use_container_width=True)
+
+    st.markdown("#### Skumulowany Pobór Ciepła w Sezonie [Jednostki U]")
+    fig_cum = go.Figure()
+    if not base_df.empty:
+        fig_cum.add_trace(go.Scatter(
+            x=base_df["period_label"], y=base_df["delta_units"].cumsum(),
+            mode='lines+markers', name="Suma 2025/2026", line=dict(color="#FF9500", width=3)
+        ))
+    if not sonoff_df.empty:
+        fig_cum.add_trace(go.Scatter(
+            x=sonoff_df["period_label"], y=sonoff_df["delta_units"].cumsum(),
+            mode='lines+markers', name="Suma 2026/2027 (Sonoff)", line=dict(color="#34C759", width=4)
+        ))
+    fig_cum.update_layout(xaxis_title="Okres", yaxis_title="Skumulowane ΔU", template="plotly_white")
     st.plotly_chart(fig_cum, use_container_width=True)
 
-with tab_audit:
-    st.subheader(f"🔍 Kontrola Nr Licznika i Spójności: {ROOMS_CONFIG[current_room]['icon']} {current_room}")
+with tab_breakdown:
+    st.markdown("#### Udział Procentowy Pokojów w Łącznym Zużyciu Mieszkania (2026/2027)")
     
-    if not df_filtered.empty:
-        # Pobieranie unikalnych numerów liczników dla tego pokoju
-        meters_used = df_filtered["meter_number"].unique()
-        st.write(f" Przypisany numer licznika / podzielnika w bazie: **{', '.join([str(m) for m in meters_used])}**")
+    sonoff_all_rooms = df[(df["season"] == "2026/2027 (Sonoff od 09.2026)") & (df["room_name"] != "Licznik Główny")]
+    
+    if not sonoff_all_rooms.empty:
+        room_summary = sonoff_all_rooms.groupby("room_name")["delta_units"].sum().reset_index()
         
-        # Wyliczenie przelicznika U / GJ
-        df_filtered["u_per_gj"] = df_filtered.apply(
-            lambda r: (r["delta_units"] / r["delta_gj"]) if r["delta_gj"] > 0 else 0.0, axis=1
+        fig_pie = px.pie(
+            room_summary, values="delta_units", names="room_name",
+            hole=0.5, color_discrete_sequence=["#007AFF", "#5856D6", "#FF9500", "#FF2D55"]
         )
-        
-        fig_audit = px.line(
-            df_filtered, x="period_label", y="u_per_gj", color="season", markers=True,
-            title="Spójność współczynnika oddawania ciepła (Jednostki U / GJ)",
-            labels={"u_per_gj": "Stosunek U / GJ", "period_label": "Okres"}
-        )
-        fig_audit.update_layout(template="plotly_white")
-        st.plotly_chart(fig_audit, use_container_width=True)
-        
-        st.dataframe(df_filtered[[
-            "season", "period_label", "meter_number", "units_start", "units_end", 
-            "delta_units", "delta_gj", "u_per_gj", "hdd", "sgi"
-        ]], use_container_width=True)
+        fig_pie.update_traces(textinfo='percent+label', textfont_size=14)
+        fig_pie.update_layout(template="plotly_white", showlegend=False)
+        st.plotly_chart(fig_pie, use_container_width=True)
     else:
-        st.info("Brak wpisów dla wybranego pokoju.")
+        st.info("Brak wpisów dla sezonu 2026/2027 w pokojach, aby pokazać strukturę.")
 
-with tab_sim:
-    st.subheader("💰 Prognoza i Realna Oszczędność w PLN")
-    if not merged_comp.empty and "expected_gj" in merged_comp.columns:
-        merged_comp["expected_cost"] = merged_comp["expected_gj"] * avg_cost_gj
-        merged_comp["actual_cost"] = merged_comp["delta_gj_sonoff"] * avg_cost_gj
-        merged_comp["pln_saved_period"] = merged_comp["expected_cost"] - merged_comp["actual_cost"]
-
-        fig_cost = go.Figure()
-        fig_cost.add_trace(go.Bar(
-            x=merged_comp["period_label_sonoff"], y=merged_comp["expected_cost"],
-            name="Szacowany koszt bez głowic Sonoff", marker_color="#e67e22"
-        ))
-        fig_cost.add_trace(go.Bar(
-            x=merged_comp["period_label_sonoff"], y=merged_comp["actual_cost"],
-            name="Rzeczywisty koszt z Sonoff (2026/2027)", marker_color="#27ae60"
-        ))
-        fig_cost.update_layout(barmode='group', yaxis_title="Koszt PLN", template="plotly_white")
-        st.plotly_chart(fig_cost, use_container_width=True)
-
-        st.dataframe(merged_comp[[
-            "period_label_sonoff", "hdd_sonoff", "delta_gj_sonoff", 
-            "expected_gj", "gj_saved", "expected_cost", "actual_cost", "pln_saved_period"
-        ]].rename(columns={
-            "period_label_sonoff": "Okres",
-            "hdd_sonoff": "HDD",
-            "delta_gj_sonoff": "Rzeczywiste GJ",
-            "expected_gj": "Oczekiwane GJ (bez Sonoff)",
-            "gj_saved": "Zaoszczędzono GJ",
-            "expected_cost": "Koszt Oczekiwany [PLN]",
-            "actual_cost": "Koszt Realny [PLN]",
-            "pln_saved_period": "Zysk [PLN]"
-        }).style.format({
-            "HDD": "{:.1f}", "Rzeczywiste GJ": "{:.2f}", "Oczekiwane GJ (bez Sonoff)": "{:.2f}",
-            "Zaoszczędzono GJ": "{:+.2f}", "Koszt Oczekiwany [PLN]": "{:.2f} zł",
-            "Koszt Realny [PLN]": "{:.2f} zł", "Zysk [PLN]": "{:+.2f} zł"
-        }), use_container_width=True)
-    else:
-        st.warning("Dodaj odczyty z obu sezonów (2025/2026 oraz 2026/2027), aby wygenerować wyliczenia kosztowe.")
+with tab_audit:
+    st.markdown(f"#### Przypisany Numer Licznika dla Pokoju: `{current_room}`")
+    meters = df_filtered["meter_number"].unique()
+    st.info(f"Oznaczenie podzielnika w bazie: **{', '.join([str(m) for m in meters])}**")
+    
+    st.dataframe(df_filtered[[
+        "season", "period_label", "meter_number", "units_start", "units_end", "delta_units", "delta_gj", "target_limit", "notes"
+    ]], use_container_width=True)
 
 with tab_table:
-    st.subheader(f"📋 Wszystkie Wpisy dla Pokoju: {current_room}")
+    st.markdown("#### Wszystkie Wpisy w Bazie Danych dla Wybranego Pokoju")
     st.dataframe(df_filtered.sort_values(by=["season", "period_order"]), use_container_width=True)
 
     st.divider()
-    st.subheader("🗑️ Usuwanie Wpisu po ID")
     del_id = st.number_input("Podaj ID wpisu do usunięcia:", min_value=1, step=1)
-    if st.button("Usuń Wpis"):
+    if st.button("Usuń Wpis", type="primary"):
         if del_id in df["id"].values:
             df = df[df["id"] != del_id]
             save_data(df, commit_message=f"Usunięto wpis ID {del_id}")
-            st.success(f"Wpis o ID {del_id} został usunięty.")
+            st.success(f"Usunięto wpis {del_id}")
             st.rerun()
         else:
-            st.error("Nie znaleziono wpisu o podanym ID.")
+            st.error("Nie znaleziono podanego ID.")
