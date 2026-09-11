@@ -261,6 +261,12 @@ def get_tuesday_for_iso_week(year, week):
 df = load_data()
 
 # ---------------------------------------------------------
+# SPRAWDŻ CZY DZIŚ JEST WTOREK (Automatyczne okno alertu)
+# ---------------------------------------------------------
+today = date.today()
+is_tuesday = (today.weekday() == 1)
+
+# ---------------------------------------------------------
 # NAWIGACJA GŁÓWNA I NAGŁÓWEK
 # ---------------------------------------------------------
 if "selected_room" not in st.session_state:
@@ -292,12 +298,14 @@ if not df_room.empty:
     val_start = float(last_row.get("units_start", 0.0))
     val_end = float(last_row.get("units_end", 0.0))
     last_date = str(last_row.get("date_entry", "Brak odczytów"))
+    last_delta = float(last_row.get("delta_units", 0.0))
     total_delta_room = df_room[df_room["season"] == "2026/2027 (Sonoff - Wtorki)"]["delta_units"].sum()
 else:
     last_meter = ROOMS_CONFIG[current_room]["meter_default"]
     val_start = 110.4 if current_room == "Pokój Dziecka" else (126.7 if current_room == "Sypialnia" else 0.0)
     val_end = val_start
     last_date = "Brak odczytów"
+    last_delta = 0.0
     total_delta_room = 0.0
 
 live_outdoor_temp = get_outdoor_temp()
@@ -305,7 +313,65 @@ if live_outdoor_temp < 10.0 and total_delta_room > 15.0:
     st.toast(f"⚠️ Uwaga! Spadek temp. do {live_outdoor_temp}°C w Siemianowicach – wysokie zużycie w strefie {current_room}!", icon="🔥")
 
 # ---------------------------------------------------------
-# KARTA INFORMACYJNA (iOS 18 GLASSMORPHISM) + POWIĘKSZONA POGODA
+# AUTOMATYCZNE OKNO (MODAL) DLA WTORKOWYCH ODCZYTÓW
+# ---------------------------------------------------------
+if is_tuesday:
+    current_year, current_iso_w, _ = today.isocalendar()
+    
+    already_added_this_week = False
+    if not df_room.empty:
+        already_added_this_week = ((df_room["week_num"] == current_iso_w) & (df_room["season"] == "2026/2027 (Sonoff - Wtorki)")).any()
+
+    if not already_added_this_week:
+        with st.expander(f"🚨 WTOREK – Wymagany Odczyt dla strefy: {current_room} (Tydzień {current_iso_w})", expanded=True):
+            st.warning(f"Dziś jest wtorek! Podaj aktualny stan podzielnika dla strefy **{current_room}**, aby zsynchronizować aplikację.")
+            
+            with st.form("auto_tuesday_modal_form"):
+                m_input = st.text_input("Numer Podzielnika", value=last_meter)
+                u_s = st.number_input("Wartość Początkowa (Poprzedni stan końcowy)", min_value=0.0, value=val_end, step=0.1)
+                u_e = st.number_input("Wartość Końcowa (Z dzisiejszego wtorku)", min_value=0.0, value=val_end + 1.0, step=0.1)
+                
+                col_g1, col_g2 = st.columns(2)
+                with col_g1:
+                    gj_s_m = st.number_input("Licznik Główny Początek [GJ]", min_value=0.0, value=0.0, step=0.01)
+                with col_g2:
+                    gj_e_m = st.number_input("Licznik Główny Koniec [GJ]", min_value=0.0, value=0.0, step=0.01)
+                
+                modal_notes = st.text_input("Uwagi / Nastawa", value="Wtorkowa synchronizacja automatyczna")
+
+                if st.form_submit_button("⚡ Zapisz i zsynchronizuj aplikację", use_container_width=True):
+                    delta_u_m = u_e - u_s
+                    delta_g_m = gj_e_m - gj_s_m if gj_e_m > gj_s_m else 0.0
+
+                    if delta_u_m < 0:
+                        st.error("Wartość końcowa nie może być mniejsza od początkowej!")
+                    else:
+                        next_id = int(df["id"].max() + 1) if not df.empty and pd.notna(df["id"].max()) else 1
+                        new_row_modal = pd.DataFrame([{
+                            "id": next_id,
+                            "season": "2026/2027 (Sonoff - Wtorki)",
+                            "week_num": current_iso_w,
+                            "period_label": f"Tydzień {current_iso_w:02d} (Wtorek)",
+                            "date_entry": str(today),
+                            "room_name": current_room,
+                            "meter_number": m_input,
+                            "units_start": u_s,
+                            "units_end": u_e,
+                            "delta_units": delta_u_m,
+                            "gj_start": gj_s_m,
+                            "gj_end": gj_e_m,
+                            "delta_gj": delta_g_m,
+                            "temp_zewnetrzna": live_outdoor_temp,
+                            "notes": modal_notes
+                        }])
+
+                        df = pd.concat([df, new_row_modal], ignore_index=True)
+                        if save_data(df, commit_message=f"Automatyczny odczyt wtorkowy: {current_room} T{current_iso_w}"):
+                            st.success("Zapisano pomyślnie! Synchronizuję aplikację...")
+                            st.rerun()
+
+# ---------------------------------------------------------
+# KARTA INFORMACYJNA (iOS 18 GLASSMORPHISM)
 # ---------------------------------------------------------
 st.markdown(f"""
 <div class="ios-room-info-card">
@@ -320,16 +386,16 @@ st.markdown(f"""
     </div>
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;">
         <div class="val-box">
-            <div class="val-title">Wartość Początkowa</div>
+            <div class="val-title">Stan Początkowy</div>
             <div class="val-num">{val_start:.1f} U</div>
         </div>
         <div class="val-box">
-            <div class="val-title">Stan Końcowy / Zero</div>
+            <div class="val-title">Ostatni Stan Licznika</div>
             <div class="val-num">{val_end:.1f} U</div>
         </div>
         <div class="val-box">
             <div class="val-title">Ostatni Przyrost (ΔU)</div>
-            <div class="val-num" style="color: #34C759;">+{(val_end - val_start):.1f} U</div>
+            <div class="val-num" style="color: #34C759;">+{last_delta:.1f} U</div>
         </div>
         <div class="val-box">
             <div class="val-title">Suma Sezon Sonoff</div>
@@ -343,16 +409,16 @@ st.markdown(f"""
 <div class="ios-balance-plus">
     <span style="font-size: 16px; font-weight: 800; color: #34C759;">🟢 AKTYWNA LOKALIZACJA: SIEMIANOWICE ŚL. - BYTKÓW (ul. ZHP 3)</span><br>
     <span style="font-size: 13px; color: #3A3A3C; opacity: 0.85;">
-        Automatyczne pobieranie temperatury i korelacja AI z systemem Sonoff działają poprawnie w architekturze iOS.
+        Automatyczna synchronizacja wtorkowa i korelacja AI z systemem Sonoff działają w czasie rzeczywistym.
     </span>
 </div>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# SIDEBAR: FORMULARZ ODCZYTU + DEBUG & PIN
+# SIDEBAR: FORMULARZ RĘCZNEGO ODCZYTU + DEBUG & PIN
 # ---------------------------------------------------------
 with st.sidebar:
-    st.header("📥 Nowy Odczyt (Wtorek)")
+    st.header("📥 Nowy Odczyt (Ręczny)")
     st.caption(f"Strefa: **{current_room}**")
 
     season_input = st.selectbox("Sezon grzewczy", SEASONS, index=1)
@@ -381,7 +447,7 @@ with st.sidebar:
         entry_date = st.date_input("Data wpisu", tuesday_date)
         notes = st.text_input("Nastawa / Uwagi", value="Sonoff Auto 20.5°C")
 
-        if st.form_submit_button("⚡ Zapisz Odczyt Wtorkowy", use_container_width=True):
+        if st.form_submit_button("⚡ Zapisz i Synchronizuj", use_container_width=True):
             delta_u = u_end - u_start
             delta_g = gj_e - gj_s if gj_e > gj_s else 0.0
 
@@ -410,7 +476,7 @@ with st.sidebar:
 
                 df = pd.concat([df, new_row], ignore_index=True)
                 if save_data(df, commit_message=f"Wtorkowy odczyt: {current_room} T{week_input}"):
-                    st.success("Zapisano pomyślnie!")
+                    st.success("Zapisano i zsynchronizowano pomyślnie!")
                     st.rerun()
 
     st.markdown("---")
