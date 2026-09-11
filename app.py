@@ -358,48 +358,6 @@ current_room = st.session_state["selected_room"]
 st.title("🔥 Sonoff Smart Heating - Panel Sterowania & SSM Analytics")
 st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielnia Mieszkaniowa (SSM)")
 
-# ---------------------------------------------------------
-# INTEGRACJA MAPY POGODOWEJ OPENWEATHERMAP (NA WYSOKOŚCI NAGŁÓWKA)
-# ---------------------------------------------------------
-with st.expander("🗺️ Interaktywna Mapa Pogodowa OWM (Siemianowice Śl. - Bytków)", expanded=False):
-    owm_api_key = st.secrets.get("openweathermap", {}).get("api_key", "TWÓJ_KLUCZ_API")
-    # Osadzenie komponentu HTML/Leaflet z warstwą temperatury OpenWeatherMap
-    map_html = f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="utf-8">
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-        <style>
-            #owm-map {{ width: 100%; height: 350px; border-radius: 12px; }}
-        </style>
-    </head>
-    <body style="margin:0;">
-        <div id="owm-map"></div>
-        <script>
-            var map = L.map('owm-map').setView([{LAT_LOCATION}, {LON_LOCATION}], 13);
-            L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
-                maxZoom: 19,
-                attribution: '&copy; OpenStreetMap'
-            }}).addTo(map);
-            
-            // Warstwa temperatury OpenWeatherMap
-            var tempLayer = L.tileLayer('https://tile.openweathermap.org/map/temp_new/{{z}}/{{x}}/{{y}}.png?appid={owm_api_key}', {{
-                maxZoom: 19,
-                opacity: 0.6,
-                attribution: 'Map data &copy; OpenWeatherMap'
-            }}).addTo(map);
-
-            L.marker([{LAT_LOCATION}, {LON_LOCATION}]).addTo(map)
-                .bindPopup('<b>Sonoff Smart Heating</b><br>ul. Związku Harcerstwa Polskiego 3, Bytków')
-                .openPopup();
-        </script>
-    </body>
-    </html>
-    """
-    st.components.v1.html(map_html, height=370)
-
 # Wyświetlenie fancy powiadomienia, jeśli jest aktywne
 if "fancy_alert" in st.session_state:
     fa = st.session_state["fancy_alert"]
