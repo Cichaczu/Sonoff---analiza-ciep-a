@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 # KONFIGURACJA STRONY
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Sonoff Heating - iOS 18 Tuesday Tracker",
+    page_title="Sonoff Heating - iOS 18 Delight Tracker",
     page_icon="🔥",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -20,11 +20,10 @@ FILE_PATH = "data/consumption.csv"
 EST_PLN_PER_UNIT = 2.45
 
 # ---------------------------------------------------------
-# FULL APPLE iOS 18 GLASSMORPHISM & SF DESIGN SYSTEM
+# FULL APPLE iOS 18 DELIGHT & SELF-HIGHLIGHTING CSS
 # ---------------------------------------------------------
 st.markdown("""
     <style>
-    /* Systemowa czcionka Apple SF Pro */
     @import url('https://fonts.cdnfonts.com/css/sf-pro-display');
     
     html, body, [class*="css"] {
@@ -33,7 +32,6 @@ st.markdown("""
         color: #1C1C1E;
     }
 
-    /* Główny kontener strony */
     .stApp {
         background: linear-gradient(180deg, #F2F2F7 0%, #E5E5EA 100%);
     }
@@ -43,18 +41,23 @@ st.markdown("""
         background: #000000;
         color: #FFFFFF;
         border-radius: 28px;
-        padding: 12px 24px;
+        padding: 14px 26px;
         display: flex;
         align-items: center;
         justify-content: space-between;
-        box-shadow: 0 12px 30px rgba(0,0,0,0.25);
+        box-shadow: 0 12px 35px rgba(0,0,0,0.3);
         margin-bottom: 24px;
-        border: 1px solid rgba(255,255,255,0.15);
+        border: 1px solid rgba(255,255,255,0.18);
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    
+    .ios-dynamic-island:hover {
+        transform: scale(1.015);
     }
     
     @keyframes pulse-green {
         0% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0.8); }
-        70% { box-shadow: 0 0 0 10px rgba(52, 199, 89, 0); }
+        70% { box-shadow: 0 0 0 12px rgba(52, 199, 89, 0); }
         100% { box-shadow: 0 0 0 0 rgba(52, 199, 89, 0); }
     }
     
@@ -68,62 +71,48 @@ st.markdown("""
         margin-right: 8px;
     }
 
-    /* KARTY iOS 18 GLASSMORPHISM */
+    /* KAFELKI iOS - SELF-HIGHLIGHTING & DELIGHT INTERACTION */
     .ios-card {
-        background: rgba(255, 255, 255, 0.75) !important;
-        backdrop-filter: blur(25px) saturate(180%);
-        -webkit-backdrop-filter: blur(25px) saturate(180%);
-        border-radius: 24px !important;
-        padding: 22px 26px !important;
-        border: 1px solid rgba(255, 255, 255, 0.8) !important;
-        box-shadow: 0 8px 32px rgba(31, 38, 135, 0.04), 0 2px 6px rgba(0,0,0,0.02) !important;
-        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
-        margin-bottom: 18px;
+        background: rgba(255, 255, 255, 0.8) !important;
+        backdrop-filter: blur(30px) saturate(190%);
+        -webkit-backdrop-filter: blur(30px) saturate(190%);
+        border-radius: 26px !important;
+        padding: 24px 28px !important;
+        border: 1.5px solid rgba(255, 255, 255, 0.85) !important;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04) !important;
+        transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
+        margin-bottom: 20px;
+        cursor: pointer;
     }
     
     .ios-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 14px 40px rgba(0, 0, 0, 0.08) !important;
-        border-color: rgba(0, 122, 255, 0.4) !important;
+        transform: translateY(-6px) scale(1.02) !important;
+        box-shadow: 0 20px 45px rgba(0, 122, 255, 0.15), 0 0 20px rgba(255, 255, 255, 0.9) !important;
+        border-color: rgba(0, 122, 255, 0.5) !important;
     }
 
-    /* WIDGET STATUSU BILANSU (Zysk / Dopłata) */
-    .ios-balance-plus {
-        background: linear-gradient(135deg, rgba(52, 199, 89, 0.18) 0%, rgba(255, 255, 255, 0.9) 100%);
-        backdrop-filter: blur(30px);
-        -webkit-backdrop-filter: blur(30px);
-        border: 2px solid #34C759;
-        border-radius: 26px;
-        padding: 22px 28px;
-        margin-bottom: 22px;
-        box-shadow: 0 10px 30px rgba(52, 199, 89, 0.18);
-    }
-    
-    .ios-balance-minus {
-        background: linear-gradient(135deg, rgba(255, 59, 48, 0.18) 0%, rgba(255, 255, 255, 0.9) 100%);
-        backdrop-filter: blur(30px);
-        -webkit-backdrop-filter: blur(30px);
-        border: 2px solid #FF3B30;
-        border-radius: 26px;
-        padding: 22px 28px;
-        margin-bottom: 22px;
-        box-shadow: 0 10px 30px rgba(255, 59, 48, 0.18);
-    }
-
-    /* WIDGET PODGLĄDU PODZIELNIKA (iOS Widget Style) */
+    /* POSZCZEGÓLNE POD-KAFELKI WARTOŚCI (MINI-WIDGETY) */
     .val-container {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        gap: 12px;
-        margin-top: 14px;
+        gap: 14px;
+        margin-top: 16px;
     }
     
     .val-badge {
-        background: rgba(242, 242, 247, 0.8);
-        border-radius: 18px;
-        padding: 14px 10px;
+        background: rgba(242, 242, 247, 0.85);
+        border-radius: 20px;
+        padding: 16px 12px;
         text-align: center;
         border: 1px solid rgba(229, 229, 234, 0.9);
+        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    
+    .val-badge:hover {
+        transform: scale(1.06);
+        background: #FFFFFF;
+        border-color: #007AFF;
+        box-shadow: 0 8px 25px rgba(0, 122, 255, 0.2);
     }
     
     .val-title {
@@ -135,61 +124,81 @@ st.markdown("""
     }
     
     .val-number {
-        font-size: 26px;
+        font-size: 28px;
         font-weight: 800;
         color: #007AFF;
         margin-top: 4px;
-        letter-spacing: -0.5px;
+        letter-spacing: -0.6px;
     }
 
-    /* iOS SEGMENTED TABS CONTROL */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 4px;
-        background: rgba(120, 120, 128, 0.12) !important;
-        backdrop-filter: blur(20px);
-        padding: 4px;
-        border-radius: 16px !important;
+    /* WIDGET STATUSU BILANSU (Zysk / Dopłata) Z EFEKTEM NEON GLOW */
+    .ios-balance-plus {
+        background: linear-gradient(135deg, rgba(52, 199, 89, 0.2) 0%, rgba(255, 255, 255, 0.95) 100%);
+        backdrop-filter: blur(30px);
+        border: 2px solid #34C759;
+        border-radius: 28px;
+        padding: 24px 30px;
+        margin-bottom: 22px;
+        box-shadow: 0 10px 30px rgba(52, 199, 89, 0.15);
+        transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .ios-balance-plus:hover {
+        transform: translateY(-5px) scale(1.02);
+        box-shadow: 0 18px 45px rgba(52, 199, 89, 0.35);
     }
     
-    .stTabs [data-baseweb="tab"] {
-        height: 38px;
-        border-radius: 12px !important;
-        border: none !important;
-        font-weight: 600 !important;
-        font-size: 13px !important;
-        color: #3A3A3C !important;
-        transition: all 0.2s cubic-bezier(0.2, 0, 0, 1) !important;
+    .ios-balance-minus {
+        background: linear-gradient(135deg, rgba(255, 59, 48, 0.2) 0%, rgba(255, 255, 255, 0.95) 100%);
+        backdrop-filter: blur(30px);
+        border: 2px solid #FF3B30;
+        border-radius: 28px;
+        padding: 24px 30px;
+        margin-bottom: 22px;
+        box-shadow: 0 10px 30px rgba(255, 59, 48, 0.15);
+        transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .ios-balance-minus:hover {
+        transform: translateY(-5px) scale(1.02);
+        box-shadow: 0 18px 45px rgba(255, 59, 48, 0.35);
     }
 
+    /* iOS TABS & BUTTONS */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 6px;
+        background: rgba(120, 120, 128, 0.12) !important;
+        backdrop-filter: blur(20px);
+        padding: 5px;
+        border-radius: 18px !important;
+    }
+    
     .stTabs [aria-selected="true"] {
         background-color: #FFFFFF !important;
         color: #000000 !important;
-        box-shadow: 0 3px 12px rgba(0, 0, 0, 0.12) !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.12) !important;
+        transform: scale(1.02);
     }
 
-    /* SIDEBAR iOS PANEL */
     [data-testid="stSidebar"] {
-        background-color: rgba(249, 249, 249, 0.85) !important;
+        background-color: rgba(249, 249, 249, 0.88) !important;
         backdrop-filter: blur(30px);
-        border-right: 1px solid rgba(0,0,0,0.05);
+        border-right: 1px solid rgba(0,0,0,0.06);
     }
     
-    /* PRZYCISKI W STYLU iOS */
     .stButton > button {
-        border-radius: 16px !important;
-        font-weight: 600 !important;
-        letter-spacing: -0.2px !important;
-        transition: all 0.2s ease !important;
+        border-radius: 18px !important;
+        font-weight: 700 !important;
+        transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
         border: none !important;
     }
     .stButton > button:hover {
-        transform: scale(1.02);
+        transform: scale(1.04) !important;
+        box-shadow: 0 8px 20px rgba(0, 122, 255, 0.25) !important;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# OBSŁUGA DANYCH & DAT WTORKOWYCH
+# OBSŁUGA DANYCH
 # ---------------------------------------------------------
 ROOMS_CONFIG = {
     "Salon": {"icon": "🛋️", "meter": "POD-SAL-2026"},
@@ -207,8 +216,7 @@ def get_github_repo():
         repo_name = github_config.get("repo")
         if token and repo_name:
             return Github(token).get_repo(repo_name)
-    except Exception:
-        return None
+    except Exception: return None
     return None
 
 def create_empty_df():
@@ -225,8 +233,7 @@ def load_data():
         try:
             file_content = repo.get_contents(FILE_PATH, ref=branch)
             return pd.read_csv(io.StringIO(file_content.decoded_content.decode('utf-8')))
-        except Exception:
-            return load_local_fallback()
+        except Exception: return load_local_fallback()
     return load_local_fallback()
 
 def load_local_fallback():
@@ -259,33 +266,33 @@ def save_data(df, commit_message="Aktualizacja odczytu"):
 def get_tuesday_for_iso_week(year, week):
     first_day = date(year, 1, 4)
     start_of_year = first_day - timedelta(days=first_day.weekday())
-    target_tuesday = start_of_year + timedelta(weeks=week-1, days=1)
-    return target_tuesday
+    return start_of_year + timedelta(weeks=week-1, days=1)
 
 df = load_data()
 
 # ---------------------------------------------------------
-# STREFA NAGŁÓWKA iOS DYNAMIC ISLAND
+# INTERFEJS GŁÓWNY
 # ---------------------------------------------------------
 if "selected_room" not in st.session_state:
     st.session_state["selected_room"] = "Salon"
 
 current_room = st.session_state["selected_room"]
 
+# Dynamic Island
 st.markdown("""
 <div class="ios-dynamic-island">
-    <div style="display: flex; align-items: center; gap: 10px;">
-        <span style="font-size: 20px;">🔥</span>
-        <span style="font-weight: 700; font-size: 16px; letter-spacing: -0.3px;">Sonoff Smart Heating</span>
-        <span style="background: rgba(255,255,255,0.2); padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600;">iOS 18 v2.5</span>
+    <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 22px;">🔥</span>
+        <span style="font-weight: 800; font-size: 17px; letter-spacing: -0.4px;">Sonoff Smart Heating</span>
+        <span style="background: rgba(255,255,255,0.22); padding: 4px 12px; border-radius: 14px; font-size: 11px; font-weight: 700;">iOS 18 Interactive</span>
     </div>
-    <div style="display: flex; align-items: center; font-size: 13px; font-weight: 500;">
-        <span class="status-dot-green"></span> System Aktywny • Cotygodniowe Odczyty we Wtorki
+    <div style="display: flex; align-items: center; font-size: 13px; font-weight: 600;">
+        <span class="status-dot-green"></span> Rytm Wtorkowy • Podświetlenia Aktywne
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# Przełącznik stref
+# Wybór strefy (Kafelki stref)
 room_cols = st.columns(len(ROOMS_CONFIG))
 for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
     is_active = (current_room == room_key)
@@ -294,11 +301,9 @@ for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
             st.session_state["selected_room"] = room_key
             st.rerun()
 
-st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
+st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# OBLICZENIA I DEDYKOWANE OKNO POKOJU (NP. SALON)
-# ---------------------------------------------------------
+# Calculation
 df_room = df[df["room_name"] == current_room].sort_values(by=["date_entry", "id"])
 
 if not df_room.empty:
@@ -315,18 +320,17 @@ else:
     last_date = "Brak odczytów"
     total_sonoff_units = 0.0
 
-# Podsumowanie bazowe
 base_room_units = df_room[df_room["season"] == "2025/2026 (Bazowy)"]["delta_units"].sum()
 diff_units = base_room_units - total_sonoff_units
 pln_balance = diff_units * EST_PLN_PER_UNIT
 
-# KARTA WIDŻETU STREFY (iOS 18 WIDGET)
+# SAMODZIELNY KAFELEK POKOJU Z PODKAFELKAMI (EFEKT DELIGHT & SELF-HIGHLIGHT)
 st.markdown(f"""
 <div class="ios-card">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-        <div style="font-size: 22px; font-weight: 800; color: #1C1C1E; display: flex; align-items: center; gap: 8px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div style="font-size: 24px; font-weight: 800; color: #1C1C1E; display: flex; align-items: center; gap: 10px;">
             {ROOMS_CONFIG[current_room]['icon']} Pokój: <b>{current_room}</b>
-            <span style="font-family: monospace; font-size: 12px; background: #E5E5EA; padding: 4px 10px; border-radius: 10px; color: #48484A;">
+            <span style="font-family: monospace; font-size: 13px; background: rgba(0,122,255,0.1); color: #007AFF; padding: 4px 12px; border-radius: 12px; font-weight: 700;">
                 {last_meter}
             </span>
         </div>
@@ -355,74 +359,62 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# WIDGET ZYSKU / STRATY (CZY JESTEŚMY NA PLUSIE CZY MINUSIE?)
-# ---------------------------------------------------------
+# WIDGET BILANSU
 if total_sonoff_units > 0:
     if diff_units >= 0:
         st.markdown(f"""
         <div class="ios-balance-plus">
-            <div style="font-size: 20px; font-weight: 800; color: #145A25; margin-bottom: 4px;">
+            <div style="font-size: 18px; font-weight: 800; color: #145A25; margin-bottom: 2px;">
                 🟢 STAN BILANSU: JESTEŚ NA PLUSIE!
             </div>
-            <div style="font-size: 34px; font-weight: 800; color: #1E7E34; letter-spacing: -1px;">
+            <div style="font-size: 36px; font-weight: 900; color: #1E7E34; letter-spacing: -1px;">
                 +{pln_balance:.2f} PLN
             </div>
             <div style="font-size: 14px; color: #2C3E50; margin-top: 6px; font-weight: 500;">
-                🎉 <b>Świetnie!</b> W pomieszczeniu <b>{current_room}</b> zużyłeś o <b>{diff_units:.0f} U mniej</b> niż w zeszłym roku. W kieszeni zostaje konkretna kwota!
+                🎉 Zużyłeś w strefie <b>{current_room}</b> o <b>{diff_units:.0f} U mniej</b> niż rok temu.
             </div>
         </div>
         """, unsafe_allow_html=True)
     else:
         st.markdown(f"""
         <div class="ios-balance-minus">
-            <div style="font-size: 20px; font-weight: 800; color: #D32F2F; margin-bottom: 4px;">
+            <div style="font-size: 18px; font-weight: 800; color: #D32F2F; margin-bottom: 2px;">
                 🔴 STAN BILANSU: JESTEŚ NA MINUSIE
             </div>
-            <div style="font-size: 34px; font-weight: 800; color: #D32F2F; letter-spacing: -1px;">
+            <div style="font-size: 36px; font-weight: 900; color: #D32F2F; letter-spacing: -1px;">
                 {pln_balance:.2f} PLN
             </div>
             <div style="font-size: 14px; color: #2C3E50; margin-top: 6px; font-weight: 500;">
-                ⚠️ <b>Uwaga!</b> Zużycie w <b>{current_room}</b> przekracza zeszłoroczny poziom o <b>{abs(diff_units):.0f} U</b>. Zmniejsz nastawę nocną w harmonogramie Sonoff TRVZB do 18.5°C.
+                ⚠️ Zużycie przekracza poziom bazowy o <b>{abs(diff_units):.0f} U</b>.
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-# ---------------------------------------------------------
-# SIDEBAR: WTORKOWY FORMULARZ DANYCH
-# ---------------------------------------------------------
+# FORMULARZ BOCHNY
 with st.sidebar:
-    st.header(f"📅 Wtorkowy Odczyt")
-    st.caption(f"Strefa: **{current_room}**")
-
+    st.header(f"📅 Odczyt Wtorkowy")
     season_input = st.selectbox("Sezon grzewczy", SEASONS, index=1)
     
     current_year, current_iso_w, _ = date.today().isocalendar()
     week_input = st.number_input("Tydzień Roku (1 - 52)", min_value=1, max_value=52, value=current_iso_w)
     
-    # Wyznaczenie automatycznej daty wtorkowej dla danego tygodnia
     tuesday_date = get_tuesday_for_iso_week(2026, week_input)
     period_tag = f"Tydzień {week_input:02d} (Wtorek)"
 
-    st.info(f"📆 Domyślny dzień odczytu: **Wtorek, {tuesday_date.strftime('%d.%m.%Y')}**")
+    st.info(f"📆 Domyślny Wtorek: **{tuesday_date.strftime('%d.%m.%Y')}**")
 
     suggested_start = val_end if val_end > 0 else 0.0
 
     with st.form("tuesday_form"):
         meter_input = st.text_input("Numer Podzielnika", value=last_meter)
-        
-        st.markdown("---")
-        st.markdown("##### 🔢 Podzielnik Kaloryfera [U]")
         u_start = st.number_input("Wartość Początkowa", min_value=0.0, value=suggested_start, step=1.0)
-        u_end = st.number_input("Wartość Końcowa (Stan z wtorku)", min_value=0.0, value=suggested_start + 12.0, step=1.0)
+        u_end = st.number_input("Wartość Końcowa (Stan Wtorkowy)", min_value=0.0, value=suggested_start + 10.0, step=1.0)
 
-        st.markdown("---")
-        st.markdown("##### 🏢 Licznik Główny [GJ]")
         gj_s = st.number_input("GJ Początek", min_value=0.0, value=0.0, step=0.01)
         gj_e = st.number_input("GJ Koniec", min_value=0.0, value=0.0, step=0.01)
 
-        entry_date = st.date_input("Data wpisu", tuesday_date)
-        notes = st.text_input("Nastawa Sonoff / Uwagi", value="20.5°C Eco Schedule")
+        entry_date = st.date_input("Data odczytu", tuesday_date)
+        notes = st.text_input("Nastawa Sonoff / Uwagi", value="Sonoff Auto 20.5°C")
 
         if st.form_submit_button("⚡ Zapisz Wtorkowy Odczyt", use_container_width=True):
             delta_u = u_end - u_start
@@ -450,50 +442,39 @@ with st.sidebar:
                     "notes": notes
                 }])
 
-                df = pd.concat([df, new_row], ignore_index=True)
+                df = pd.concat([df, new_row], ignore_row_index=True if hasattr(pd, "ignore_row_index") else True)
                 if save_data(df, commit_message=f"Wtorkowy odczyt: {current_room} T{week_input}"):
-                    st.success("Odczyt wtorkowy został pomyślnie zapisany!")
+                    st.success("Wpis został zapisany!")
                     st.rerun()
 
-# ---------------------------------------------------------
-# TABY Z WYKRESAMI I HISTORIĄ (iOS SEGMENTED CONTROL)
-# ---------------------------------------------------------
-tab_charts, tab_history = st.tabs(["📈 Wykres Tygodniowy (iOS Chart)", "📋 Historia Wtorkowa"])
+# TABY Z WYKRESAMI
+tab_charts, tab_history = st.tabs(["📈 Wykres Tygodniowy (iOS Interactive)", "📋 Historia Odczytów"])
 
 with tab_charts:
-    st.markdown("#### Tygodniowe Zużycie ΔU we Wtorki")
-    
     if not df_room.empty:
         fig = go.Figure()
         fig.add_trace(go.Bar(
             x=df_room["period_label"],
             y=df_room["delta_units"],
             marker_color="#007AFF",
-            marker_line_radius=8,
+            marker_line_radius=10,
             hovertemplate="Okres: %{x}<br>Zużycie: %{y:.1f} U"
         ))
         fig.update_layout(
             template="plotly_white",
-            margin=dict(l=20, r=20, t=20, b=20),
+            margin=dict(l=10, r=10, t=10, b=10),
             paper_bgcolor='rgba(0,0,0,0)',
             plot_bgcolor='rgba(0,0,0,0)',
             font=dict(family="-apple-system, SF Pro Display, sans-serif", color="#1C1C1E")
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Brak danych do wygenerowania wykresu. Wprowadź pierwszy wtorkowy odczyt.")
+        st.info("Brak danych do wykresu.")
 
 with tab_history:
-    st.markdown(f"#### Rejestr Odczytów dla: {current_room}")
     if not df_room.empty:
         st.dataframe(
-            df_room[["date_entry", "period_label", "meter_number", "units_start", "units_end", "delta_units", "notes"]]
-            .rename(columns={
-                "date_entry": "Data Wtorkowa", "period_label": "Tydzień", "meter_number": "Podzielnik",
-                "units_start": "Początek", "units_end": "Koniec", "delta_units": "Przyrost ΔU", "notes": "Nastawy / Uwagi"
-            }),
+            df_room[["date_entry", "period_label", "meter_number", "units_start", "units_end", "delta_units", "notes"]],
             use_container_width=True,
             hide_index=True
         )
-    else:
-        st.caption("Brak zarejestrowanych odczytów.")
