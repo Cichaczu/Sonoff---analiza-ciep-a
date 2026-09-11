@@ -25,22 +25,15 @@ st.set_page_config(
 FILE_PATH = "data/consumption.csv"
 EST_PLN_PER_UNIT = 2.45
 
-# Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m²
-SSM_CO_MONTHLY_ADVANCE = 774.53  # 11.64 zł / m² / mc (zaliczka miesięczna)
-SSM_SEASON_MONTHS = 7  # Sezon grzewczy (październik - kwiecień)
-SSM_ANNUAL_CO_BUDGET = (
-    SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS
-)  # Całkowity budżet zaliczkowy CO na sezon (~5421.71 zł)
+SSM_CO_MONTHLY_ADVANCE = 774.53
+SSM_SEASON_MONTHS = 7
+SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS
 
-# Współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego
 LAT_LOCATION = 50.3264
 LON_LOCATION = 19.0295
 LOCATION_NAME = "Siemianowice Śl. - Bytków (ZHP)"
 
 
-# ---------------------------------------------------------
-# POBIERANIE POGODY Z OPENWEATHERMAP
-# ---------------------------------------------------------
 def get_outdoor_temp():
   api_key = st.secrets.get("openweathermap", {}).get("api_key", None)
   if not api_key:
@@ -55,9 +48,6 @@ def get_outdoor_temp():
   return 12.5
 
 
-# ---------------------------------------------------------
-# OBSŁUGA POWIADOMIEŃ WEBHOOK (Telegram / Discord / Pushover)
-# ---------------------------------------------------------
 def send_webhook_notification(message):
   webhook_cfg = st.secrets.get("webhook", {})
   service = webhook_cfg.get("service", "").lower()
@@ -76,7 +66,7 @@ def send_webhook_notification(message):
       requests.post(url, json={"content": message}, timeout=3)
     elif service == "pushover":
       requests.post(
-          "https://api.pushover.net/1/messages.json",
+          "https://pushover.net/1/messages.json",
           data={
               "token": webhook_cfg.get("token"),
               "user": webhook_cfg.get("user_key"),
@@ -88,9 +78,6 @@ def send_webhook_notification(message):
     pass
 
 
-# ---------------------------------------------------------
-# WALIDACJA DANYCH I TESTY JEDNOSTKOWE
-# ---------------------------------------------------------
 def validate_new_entry(u_end, prev_val_end, week_num, season, df_existing, room_name):
   errors = []
   if u_end < prev_val_end:
@@ -109,9 +96,6 @@ def validate_new_entry(u_end, prev_val_end, week_num, season, df_existing, room_
   return errors
 
 
-# ---------------------------------------------------------
-# ZAAWANSOWANY MODEL PREDYPCYJNY SEZONU (Machine Learning)
-# ---------------------------------------------------------
 def run_advanced_ml_prediction(df_all):
   df_sonoff = df_all[df_all["season"].str.contains("Sonoff", na=False)]
   if df_sonoff.empty or len(df_sonoff) < 2:
@@ -147,9 +131,6 @@ def run_advanced_ml_prediction(df_all):
   return total_cost_pred, total_predicted_units
 
 
-# ---------------------------------------------------------
-# STYLIZACJA W STYLU iOS 18
-# ---------------------------------------------------------
 st.markdown(
     """
     <style>
@@ -189,9 +170,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ---------------------------------------------------------
-# KONFIGURACJA POMIESZCZEŃ I GITHUB
-# ---------------------------------------------------------
 ROOMS_CONFIG = {
     "Salon": {"icon": "🛋️", "meter_default": "POD-SAL-2026"},
     "Sypialnia": {"icon": "🛏️", "meter_default": "11420"},
@@ -439,9 +417,6 @@ room_share_pct = (
 )
 season_budget_pln = SSM_ANNUAL_CO_BUDGET
 
-# ---------------------------------------------------------
-# AUTOMATYCZNE OKNO DLA WTORKOWYCH ODCZYTÓW
-# ---------------------------------------------------------
 if is_tuesday:
   current_year, current_iso_w, _ = today.isocalendar()
   already_added = False
@@ -545,9 +520,6 @@ if is_tuesday:
               st.success("Zapisano pomyślnie!")
               st.rerun()
 
-# ---------------------------------------------------------
-# KARTA INFORMACYJNA iOS 18 (Z PRZELICZENIEM NA PLN)
-# ---------------------------------------------------------
 st.markdown(
     f"""
 <div class="ios-room-info-card">
@@ -560,36 +532,58 @@ st.markdown(
             🌡️ Temp. zewn.: <b style="color: #007AFF;">{live_outdoor_temp}°C</b> &nbsp;|&nbsp; 📊 Udział: <b style="color: #AF52DE;">{room_share_pct:.1f}%</b>
         </div>
     </div>
-    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;">
-        <div class="val-box">
-            <div class="val-title">Początek Sezonu</div>
-            <div class="val-num">{val_start:.1f} U</div>
-            <div style="font-size: 11px; color: #8E8E93; margin-top: 2px;">{val_start*EST_PLN_PER_UNIT:.2f} PLN</div>
-        </div>
-        <div class="val-box">
-            <div class="val-title">Stan Aktualny</div>
-            <div class="val-num">{val_end:.1f} U</div>
-            <div style="font-size: 11px; color: #8E8E93; margin-top: 2px;">{val_end*EST_PLN_PER_UNIT:.2f} PLN</div>
-        </div>
-        <div class="val-box">
-            <div class="val-title">Ostatni Przyrost</div>
-            <div class="val-num" style="color: #34C759;">+{last_delta:.1f} U</div>
-            <div style="font-size: 11px; color: #34C759; margin-top: 2px;">+{last_delta*EST_PLN_PER_UNIT:.2f} PLN</div>
-        </div>
-        <div class="val-box">
-            <div class="val-title">Suma Strefa</div>
-            <div class="val-num" style="color: #AF52DE;">{total_delta_room:.1f} U</div>
-            <div style="font-size: 11px; color: #AF52DE; margin-top: 2px;">{total_delta_room*EST_PLN_PER_UNIT:.2f} PLN</div>
-        </div>
-    </div>
-</div>
 """,
     unsafe_allow_html=True,
 )
 
-# ---------------------------------------------------------
-# SIDEBAR: FORMULARZ RĘCZNY I SYMULATOR
-# ---------------------------------------------------------
+c1, c2, c3, c4 = st.columns(4)
+with c1:
+  st.markdown(
+      f"""
+    <div class="val-box">
+        <div class="val-title">Początek Sezonu</div>
+        <div class="val-num">{val_start:.1f} U</div>
+        <div style="font-size: 11px; color: #8E8E93; margin-top: 2px;">{val_start*EST_PLN_PER_UNIT:.2f} PLN</div>
+    </div>
+    """,
+      unsafe_allow_html=True,
+  )
+with c2:
+  st.markdown(
+      f"""
+    <div class="val-box">
+        <div class="val-title">Stan Aktualny</div>
+        <div class="val-num">{val_end:.1f} U</div>
+        <div style="font-size: 11px; color: #8E8E93; margin-top: 2px;">{val_end*EST_PLN_PER_UNIT:.2f} PLN</div>
+    </div>
+    """,
+      unsafe_allow_html=True,
+  )
+with c3:
+  st.markdown(
+      f"""
+    <div class="val-box">
+        <div class="val-title">Ostatni Przyrost</div>
+        <div class="val-num" style="color: #34C759;">+{last_delta:.1f} U</div>
+        <div style="font-size: 11px; color: #34C759; margin-top: 2px;">+{last_delta*EST_PLN_PER_UNIT:.2f} PLN</div>
+    </div>
+    """,
+      unsafe_allow_html=True,
+  )
+with c4:
+  st.markdown(
+      f"""
+    <div class="val-box">
+        <div class="val-title">Suma Strefa</div>
+        <div class="val-num" style="color: #AF52DE;">{total_delta_room:.1f} U</div>
+        <div style="font-size: 11px; color: #AF52DE; margin-top: 2px;">{total_delta_room*EST_PLN_PER_UNIT:.2f} PLN</div>
+    </div>
+    """,
+      unsafe_allow_html=True,
+  )
+
+st.markdown("</div>", unsafe_allow_html=True)
+
 with st.sidebar:
   st.header("📥 Nowy Odczyt (Ręczny)")
   season_input = st.selectbox("Sezon grzewczy", SEASONS, index=1)
@@ -684,9 +678,6 @@ with st.sidebar:
   elif temp_change_slider > 0:
     st.error(f"⚠️ Wzrost kosztu: ok. +{sim_units:.1f} U (+{sim_pln:.2f} PLN)")
 
-# ---------------------------------------------------------
-# ZAKŁADKI ANALITYCZNE
-# ---------------------------------------------------------
 (
     tab_charts,
     tab_season_comp,
