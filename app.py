@@ -161,11 +161,41 @@ def get_github_repo():
         return None
     return None
 
-def create_empty_df():
-    return pd.DataFrame(columns=[
-        "id", "season", "week_num", "period_label", "date_entry",
-        "room_name", "meter_number", "units_start", "units_end", "delta_units",
-        "gj_start", "gj_end", "delta_gj", "notes"
+def create_initial_df():
+    # Inicjalizacja ze stanami zero (wrzesień 2026) dla głowic Sonoff
+    return pd.DataFrame([
+        {
+            "id": 1,
+            "season": "2026/2027 (Sonoff - Wtorki)",
+            "week_num": 37,
+            "period_label": "Tydzień 37 (Stan Zero)",
+            "date_entry": "2026-09-08",
+            "room_name": "Sypialnia",
+            "meter_number": "11420",
+            "units_start": 0.0,
+            "units_end": 126.7,
+            "delta_units": 0.0,
+            "gj_start": 0.0,
+            "gj_end": 0.0,
+            "delta_gj": 0.0,
+            "notes": "Stan zero - wrzesień 2026"
+        },
+        {
+            "id": 2,
+            "season": "2026/2027 (Sonoff - Wtorki)",
+            "week_num": 37,
+            "period_label": "Tydzień 37 (Stan Zero)",
+            "date_entry": "2026-09-08",
+            "room_name": "Pokój Dziecka",
+            "meter_number": "11420",
+            "units_start": 0.0,
+            "units_end": 110.4,
+            "delta_units": 0.0,
+            "gj_start": 0.0,
+            "gj_end": 0.0,
+            "delta_gj": 0.0,
+            "notes": "Stan zero - wrzesień 2026"
+        }
     ])
 
 def load_data():
@@ -182,8 +212,8 @@ def load_data():
 def load_local_fallback():
     if os.path.exists(FILE_PATH):
         try: return pd.read_csv(FILE_PATH)
-        except Exception: return create_empty_df()
-    df = create_empty_df()
+        except Exception: return create_initial_df()
+    df = create_initial_df()
     os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
     df.to_csv(FILE_PATH, index=False)
     return df
@@ -217,7 +247,7 @@ df = load_data()
 # NAWIGACJA GŁÓWNA
 # ---------------------------------------------------------
 if "selected_room" not in st.session_state:
-    st.session_state["selected_room"] = "Salon"
+    st.session_state["selected_room"] = "Sypialnia"
 
 current_room = st.session_state["selected_room"]
 
@@ -264,7 +294,7 @@ st.markdown(f"""
             <span class="meter-badge">{last_meter}</span>
         </div>
         <div style="font-size: 13px; color: #8E8E93; font-weight: 500;">
-            📅 Ostatni wtorek: <b>{last_date}</b>
+            📅 Ostatni odczyt: <b>{last_date}</b>
         </div>
     </div>
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
@@ -273,7 +303,7 @@ st.markdown(f"""
             <div class="val-num">{val_start:.1f} U</div>
         </div>
         <div class="val-box">
-            <div class="val-title">Wartość Końcowa</div>
+            <div class="val-title">Stan Końcowy / Zero</div>
             <div class="val-num">{val_end:.1f} U</div>
         </div>
         <div class="val-box">
@@ -292,22 +322,13 @@ base_room = df_room[df_room["season"] == "2025/2026 (Bazowy)"]["delta_units"].su
 diff_units = base_room - total_delta_room
 pln_balance = diff_units * EST_PLN_PER_UNIT
 
-if total_delta_room > 0:
+if total_delta_room > 0 or val_end > 0:
     if diff_units >= 0:
         st.markdown(f"""
         <div class="ios-balance-plus">
-            <span style="font-size: 16px; font-weight: 800; color: #1E7E34;">🟢 DODATNI BILANS FINANSOWY (+{pln_balance:.2f} PLN)</span><br>
+            <span style="font-size: 16px; font-weight: 800; color: #1E7E34;">🟢 BAZA WRZESIEŃ 2026 ZAINSTALOWANA (+{pln_balance:.2f} PLN)</span><br>
             <span style="font-size: 13px; color: #2C3E50;">
-                W strefie <b>{current_room}</b> zaoszczędziłeś <b>{diff_units:.0f} U</b> względem roku bazowego.
-            </span>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown(f"""
-        <div class="ios-balance-minus">
-            <span style="font-size: 16px; font-weight: 800; color: #D32F2F;">🔴 UJEMNY BILANS FINANSOWY ({pln_balance:.2f} PLN)</span><br>
-            <span style="font-size: 13px; color: #2C3E50;">
-                W strefie <b>{current_room}</b> zużycie wzrosło o <b>{abs(diff_units):.0f} U</b>.
+                Strefa <b>{current_room}</b> gotowa do pomiarów wtorkowych. Stan początkowy: <b>{val_end:.1f} U</b>.
             </span>
         </div>
         """, unsafe_allow_html=True)
@@ -327,7 +348,7 @@ with st.sidebar:
     period_tag = f"Tydzień {week_input:02d} (Wtorek)"
 
     st.info(f"📆 Domyślny Wtorek: **{tuesday_date.strftime('%d.%m.%Y')}**")
-    suggested_start = val_end if val_end > 0 else (126.7 if current_room == "Sypialnia" else (110.4 if current_room == "Pokój Dziecka" else 0.0))
+    suggested_start = val_end
 
     with st.form("tuesday_form"):
         meter_input = st.text_input("Numer Podzielnika", value=last_meter)
@@ -335,7 +356,7 @@ with st.sidebar:
         st.markdown("---")
         st.markdown("##### 🔢 Stan Podzielnika [U]")
         u_start = st.number_input("Wartość Początkowa", min_value=0.0, value=suggested_start, step=1.0)
-        u_end = st.number_input("Wartość Końcowa (z Wtorku)", min_value=0.0, value=suggested_start + 10.0, step=1.0)
+        u_end = st.number_input("Wartość Końcowa (z Wtorku)", min_value=0.0, value=suggested_start + 5.0, step=1.0)
         
         st.markdown("---")
         st.markdown("##### 🏢 Licznik Główny [GJ]")
