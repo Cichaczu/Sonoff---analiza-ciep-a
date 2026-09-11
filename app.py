@@ -115,10 +115,8 @@ def validate_new_entry(u_end, prev_val_end, week_num, season, df_existing, room_
 def run_advanced_ml_prediction(df_all):
   df_sonoff = df_all[df_all["season"].str.contains("Sonoff", na=False)]
   if df_sonoff.empty or len(df_sonoff) < 2:
-    return (
-        "Za mało danych historycznych do predykcji ML (wymagane min. 2"
-        " odczyty)."
-    ), 0.0
+    current_units = df_sonoff["delta_units"].sum() if not df_sonoff.empty else 0.0
+    return current_units * EST_PLN_PER_UNIT, current_units
 
   X = df_sonoff[["week_num", "temp_zewnetrzna"]].values
   y = df_sonoff["delta_units"].values
