@@ -327,7 +327,7 @@ if "selected_room" not in st.session_state:
 
 current_room = st.session_state["selected_room"]
 
-st.title("🔥 Sonoff ZB Bridge-P -> Sonoff Sonoff SNZB-02D -> TRVZB Smart Zigbee3.0 Thermostatic Smart Heating - Panel Sterowania & SSM Analytics")
+st.title("🔥 Sonoff Smart Heating - Panel Sterowania & SSM Analytics")
 st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielnia Mieszkaniowa (SSM)")
 
 # Wyświetlenie fancy powiadomienia, jeśli jest aktywne
