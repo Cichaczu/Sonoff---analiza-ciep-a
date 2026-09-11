@@ -4,3 +4,4 @@ plotly
 PyGithub
 requests
 scikit-learn
+reportlab
