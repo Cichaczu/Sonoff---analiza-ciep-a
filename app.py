@@ -78,7 +78,7 @@ st.markdown(f"""
         box-shadow: 0 10px 35px rgba(0, 0, 0, 0.1) !important;
         transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
         margin-bottom: 22px;
-    }
+    }}
     .ios-room-info-card:hover {{
         transform: translateY(-4px) scale(1.01) !important;
         box-shadow: 0 18px 45px rgba(0, 122, 255, 0.2) !important;
