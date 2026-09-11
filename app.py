@@ -106,7 +106,6 @@ def save_data(df):
             headers = {"Authorization": f"token {GITHUB_TOKEN}"}
             url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH}"
             
-            # Pobierz SHA istniejącego pliku
             get_res = requests.get(url, headers=headers)
             sha = get_res.json().get("sha") if get_res.status_code == 200 else None
             
@@ -138,14 +137,12 @@ def generate_pdf(df, projection_data):
     story.append(Paragraph(f"Lokalizacja: Siemianowice Śląskie | Data generowania: {date.today().strftime('%Y-%m-%d')}", subtitle_style))
     story.append(Spacer(1, 15))
     
-    # Sekcja podsumowania predykcyjnego
     story.append(Paragraph("<b>Prognoza Finansowa do Końca Okresu Rozliczeniowego:</b>", normal_style))
     story.append(Paragraph(f"• Szacowany koszt całkowity: <b>{projection_data['total_cost']:.2f} PLN</b>", normal_style))
     story.append(Paragraph(f"• Suma wniesionych zaliczek: <b>{projection_data['total_advances']:.2f} PLN</b>", normal_style))
     story.append(Paragraph(f"• Prognozowany wynik: <b>{projection_data['balance_type']} w wysokości {abs(projection_data['balance_amount']):.2f} PLN</b>", normal_style))
     story.append(Spacer(1, 15))
     
-    # Tabela historyczna
     story.append(Paragraph("<b>Szczegółowa Historia Odczytów:</b>", normal_style))
     story.append(Spacer(1, 5))
     
@@ -181,7 +178,6 @@ def generate_pdf(df, projection_data):
     buffer.seek(0)
     return buffer.getvalue()
 
-# Główna aplikacja
 def main():
     df = load_data()
     current_temp = get_outdoor_temp()
@@ -220,7 +216,7 @@ def main():
                 st.success("Zapisano pomyślnie!")
                 st.rerun()
 
-    # Panel boczny - Szybki wpis / Narzędzia
+    # Panel boczny - Szybki wpis
     st.sidebar.header("Zarządzanie danymi")
     with st.sidebar.form("manual_add"):
         st.subheader("Dodaj ręczny wpis")
@@ -242,15 +238,13 @@ def main():
             }])
             df = pd.concat([df, new_row], ignore_index=True)
             save_data(df)
-            st.sidebar.successję("Dodano wpis!")
+            st.sidebar.success("Dodano wpis!")
             st.rerun()
 
-    # Algorytm predykcyjny kosztów
+    # Obliczenia predykcyjne
     total_spent = df['koszt_pln'].sum() if not df.empty else 0.0
-    months_elapsed = max(1, len(df) / 4.33)  # przybliżenie tygodni na miesiące
+    months_elapsed = max(1, len(df) / 4.33)
     avg_monthly_cost = total_spent / months_elapsed
-    
-    # Szacunek do końca sezonu (np. przyjęcie 6 miesięcy grzewczych łącznie)
     total_projected_cost = avg_monthly_cost * 6
     total_advances_paid = MONTHLY_ADVANCE * 6
     balance = total_advances_paid - total_projected_cost
@@ -276,23 +270,29 @@ def main():
 
     st.markdown("---")
     
-    # Wykresy analityczne Plotly
-    tab1, tab2 = st.tabs(["Wykresy Zużycia", "Generator Raportów PDF"])
+    # Zachowanie oryginalnego układu i dodanie nowej funkcjonalności jako dodatkowej zakładki
+    tab_main, tab_charts, tab_extra = st.tabs(["Główny panel odczytów", "Wykresy", "Predykcja i Raport PDF"])
     
-    with tab1:
+    with tab_main:
+        st.subheader("Tabela zarejestrowanych odczytów")
+        st.dataframe(df, use_container_width=True)
+        
+    with tab_charts:
         st.subheader("Dynamika zużycia jednostek i temperatury")
         fig = px.line(df, x="data", y=["zuzycie_tygodniowe", "temp_zewnetrzna"], markers=True,
                       labels={"value": "Wartość", "data": "Data odczytu"},
                       title="Tygodniowe zużycie energii vs Temperatura zewnętrzna")
         st.plotly_chart(fig, use_container_width=True)
         
-    with tab2:
-        st.subheader("Generowanie oficjalnego raportu do Spółdzielni Mieszkaniowej")
-        st.markdown("Pobierz kompletny raport PDF zawierający szczegółową historię odczytów, wykresy oraz podsumowanie bilansu finansowego lokalu.")
+    with tab_extra:
+        st.subheader("Algorytm Predykcji oraz Generator Raportów PDF")
+        st.markdown("Ten moduł pozwala przeanalizować symulację kosztów do końca okresu rozliczeniowego oraz pobrać gotowy dokument PDF przeznaczony dla Spółdzielni Mieszkaniowej.")
+        
+        st.info(f"Szacowany bilans na koniec okresu: **{projection_data['balance_type']} {abs(balance):.2f} PLN**")
         
         pdf_bytes = generate_pdf(df, projection_data)
         st.download_button(
-            label="Pobierz Raport PDF",
+            label="Pobierz Oficjalny Raport PDF",
             data=pdf_bytes,
             file_name=f"raport_ciepla_siemianowice_{date.today().strftime('%Y%m%d')}.pdf",
             mime="application/pdf"
