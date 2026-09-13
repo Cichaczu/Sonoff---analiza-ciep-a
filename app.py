@@ -399,21 +399,31 @@ if "fancy_alert" in st.session_state:
         del st.session_state["fancy_alert"]
 
 # ---------------------------------------------------------
-# PANEL BOCZNY: SELEKTOR SEKCJI I WIDGETY
+# PANEL BOCZNY: KAFELKI OD NAJWAŻNIEJSZEGO ORAZ WIDGETY
 # ---------------------------------------------------------
+if "sidebar_section" not in st.session_state:
+    st.session_state["sidebar_section"] = "Ustawienia Symulacji"
+
 with st.sidebar:
     st.header("⚙️ Panel Sterowania")
-    selected_sidebar_section = st.selectbox(
-        "Wybierz sekcję / widok",
-        [
-            "Ustawienia Symulacji",
-            "Nowy Odczyt (Ręczny)",
-            "Generuj Raport SSM (HTML)",
-            "Prognoza 7D (Bytków) & Sonoff AI",
-            "Symulator „Co jeśli?”",
-            "Zwrot z Inwestycji (ROI)"
-        ]
-    )
+    st.caption("Wybierz moduł (kafelki):")
+
+    # Kafelki ułożone od najważniejszego
+    sections = [
+        ("⚙️ Ustawienia Symulacji", "Ustawienia Symulacji", "Stawka PLN/U i parametry"),
+        ("💡 Zwrot z Inwestycji (ROI)", "Zwrot z Inwestycji (ROI)", "Spłata kosztów systemu"),
+        ("🌤️ Prognoza 7D & Sonoff AI", "Prognoza 7D (Bytków) & Sonoff AI", "Pogoda i anomalie"),
+        ("🎛️ Symulator „Co jeśli?”", "Symulator „Co jeśli?”", "Test zmian temperatury"),
+        ("📄 Generuj Raport SSM", "Generuj Raport SSM (HTML)", "Eksport rozliczeń HTML")
+    ]
+
+    for title, key_name, desc in sections:
+        is_sel = (st.session_state["sidebar_section"] == key_name)
+        if st.button(f"{title}\n_{desc}_", key=f"tile_{key_name}", use_container_width=True, type="primary" if is_sel else "secondary"):
+            st.session_state["sidebar_section"] = key_name
+            st.rerun()
+
+    selected_sidebar_section = st.session_state["sidebar_section"]
 
 # NAWIGACJA GŁÓWNA I NAGŁÓWEK
 if "selected_room" not in st.session_state:
@@ -681,7 +691,7 @@ with kpi_col3:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# RENDEROWANIE WYBRANEJ SEKCJI W PANELU BOCZNYM
+# RENDEROWANIE WYBRANEJ SEKCJI W PANELU BOCZNYM (KAFELKI)
 # ---------------------------------------------------------
 with st.sidebar:
     st.markdown("---")
@@ -697,116 +707,20 @@ with st.sidebar:
             help="Dynamiczna zmiana kosztu jednej jednostki zużycia (U)."
         )
 
-    elif selected_sidebar_section == "Nowy Odczyt (Ręczny)":
-        st.subheader("📥 Nowy Odczyt (Ręczny)")
-        st.caption(f"Strefa: **{current_room}**")
-
-        season_input = st.selectbox("Sezon grzewczy", SEASONS, index=1)
-        current_year, current_iso_w, _ = date.today().isocalendar()
-        week_input = st.number_input("Tydzień Roku (1 - 52)", min_value=1, max_value=52, value=current_iso_w)
+    elif selected_sidebar_section == "Zwrot z Inwestycji (ROI)":
+        st.subheader("💡 Zwrot z Inwestycji (ROI)")
+        HARDWARE_COST_EST = 775.79  # Dokładny koszt zakupu całego inteligentnego systemu
+        df_base_sum = df[df["season"].str.contains("Bazowy", na=False)]["delta_units"].sum() if not df.empty else 0.0
+        total_saved_units = max(0.0, df_base_sum - total_apartment_units) if df_base_sum > 0 else 0.0
+        total_saved_pln = total_saved_units * EST_PLN_PER_UNIT
         
-        tuesday_date = get_tuesday_for_iso_week(current_year, week_input)
-        period_tag = f"Tydzień {week_input:02d} (Wtorek)"
+        payback_ratio = min(1.0, total_saved_pln / HARDWARE_COST_EST) if HARDWARE_COST_EST > 0 else 1.0
+        st.caption(f"Koszt całego inteligentnego systemu Sonoff: **{HARDWARE_COST_EST:.2f} PLN**")
+        st.progress(payback_ratio, text=f"Spłacono: {total_saved_pln:.2f} PLN ({payback_ratio*100:.1f}%)")
 
-        st.info(f"📆 Domyślny Wtorek: **{tuesday_date.strftime('%d.%m.%Y')}**")
-
-        with st.form("tuesday_form"):
-            meter_input = st.text_input("Numer Podzielnika", value=last_meter)
-            
-            st.markdown("---")
-            st.markdown("##### 🔢 Stan Podzielnika [U]")
-            u_start = st.number_input("Stały Stan Początkowy Sezonu", min_value=0.0, value=val_start, disabled=True)
-            u_end = st.number_input("Wartość Końcowa (z Wtorku)", min_value=0.0, value=max(val_end, val_start), step=0.1)
-            temp_in_input = st.number_input("Temp. w pomieszczeniu [°C]", min_value=10.0, max_value=30.0, value=21.0, step=0.1)
-            mode_input = st.selectbox("Tryb pracy / Tag", MODES, index=0)
-            
-            st.markdown("---")
-            st.markdown("##### 🏢 Licznik Główny [GJ]")
-            gj_s = st.number_input("GJ Początek", min_value=0.0, value=0.0, step=0.01)
-            gj_e = st.number_input("GJ Koniec", min_value=0.0, value=0.0, step=0.01)
-
-            entry_date = st.date_input("Data wpisu", tuesday_date)
-            notes = st.text_input("Nastawa / Uwagi", value="Sonoff Auto 20.5°C")
-
-            if st.form_submit_button("⚡ Zapisz i Synchronizuj", use_container_width=True):
-                prev_val_end = val_end if not df_room_sonoff.empty else val_start
-                delta_u = u_end - prev_val_end
-                
-                if delta_u < 0:
-                    delta_u = 0.0
-                    notes = f"{notes} [Auto-korekta: ujemna delta]" if notes else "[Auto-korekta: ujemna delta]"
-                    
-                delta_g = gj_e - gj_s if gj_e > gj_s else 0.0
-
-                if u_end < prev_val_end:
-                    st.error("Wartość końcowa nie może być mniejsza od poprzedniego stanu licznika!")
-                else:
-                    next_id = int(df["id"].max() + 1) if not df.empty and pd.notna(df["id"].max()) else 1
-
-                    new_row = pd.DataFrame([{
-                        "id": next_id,
-                        "season": season_input,
-                        "week_num": week_input,
-                        "period_label": period_tag,
-                        "date_entry": str(entry_date),
-                        "room_name": current_room,
-                        "meter_number": meter_input,
-                        "units_start": prev_val_end,
-                        "units_end": u_end,
-                        "delta_units": delta_u,
-                        "gj_start": gj_s,
-                        "gj_end": gj_e,
-                        "delta_gj": delta_g,
-                        "temp_zewnetrzna": live_outdoor_temp,
-                        "temp_wewnetrzna": temp_in_input,
-                        "mode_tag": mode_input,
-                        "notes": notes
-                    }])
-
-                    df = pd.concat([df, new_row], ignore_index=True)
-                    if save_data(df, commit_message=f"Wtorkowy odczyt: {current_room} T{week_input}"):
-                        prev_delta = last_delta if last_delta > 0 else 1.0
-                        diff_vs_prev = ((delta_u - prev_delta) / prev_delta * 100) if prev_delta > 0 else 0.0
-                        new_total_room = total_delta_room + delta_u
-                        
-                        st.session_state["fancy_alert"] = {
-                            "timestamp": time.time(),
-                            "room": current_room,
-                            "delta": delta_u,
-                            "diff_vs_prev": diff_vs_prev,
-                            "total_room_units": new_total_room
-                        }
-                        st.success("Zapisano i zsynchronizowano pomyślnie!")
-                        st.rerun()
-
-    elif selected_sidebar_section == "Generuj Raport SSM (HTML)":
-        st.subheader("📄 Generuj Raport SSM (HTML)")
-        html_report_content = f"""
-        <html>
-        <head><meta charset='utf-8'><title>Raport CO SSM - Bytków</title></head>
-        <body style='font-family: Arial, sans-serif; padding: 20px; color: #333;'>
-            <h2>Oficjalny Raport Rozliczeniowy Ciepła CO - SSM</h2>
-            <p><b>Lokalizacja:</b> {LOCATION_NAME}</p>
-            <p><b>Powierzchnia lokalu:</b> {APARTMENT_AREA_M2} m²</p>
-            <hr>
-            <h3>Podsumowanie Finansowe</h3>
-            <ul>
-                <li>Całkowity budżet zaliczkowy CO: <b>{SSM_ANNUAL_CO_BUDGET:.2f} PLN</b></li>
-                <li>Rzeczywisty koszt zużycia (Sonoff): <b>{total_realtime_cost:.2f} PLN</b></li>
-                <li>Aktualny bilans (względem zaliczek): <b>{ssm_net_balance_to_date:+.2f} PLN</b></li>
-                <li>Szacowany wynik końcowy sezonu: <b>{ssm_projected_refund_or_extra:+.2f} PLN</b></li>
-            </ul>
-            <p><i>Raport wygenerowany automatycznie przez system Sonoff Analytics.</i></p>
-        </body>
-        </html>
-        """
-        st.download_button(
-            label="📥 Pobierz Raport Rozliczeniowy (HTML)",
-            data=html_report_content.encode("utf-8"),
-            file_name=f"raport_co_ssm_{date.today()}.html",
-            mime="text/html",
-            use_container_width=True
-        )
+        weekly_avg_cost = total_realtime_cost / weeks_logged_count if weeks_logged_count > 0 else 1.0
+        buffer_weeks = max(0.0, ssm_net_balance_to_date / weekly_avg_cost) if weekly_avg_cost > 0 else 0.0
+        st.caption(f"🛡️ Bufor bezpiecznego grzania z zaliczek: **{buffer_weeks:.1f} tyg.**")
 
     elif selected_sidebar_section == "Prognoza 7D (Bytków) & Sonoff AI":
         st.subheader("🌤️ Prognoza 7D & Sonoff AI")
@@ -845,20 +759,34 @@ with st.sidebar:
         else:
             st.info("💡 Suwak w pozycji 0.0°C – brak zmian względem obecnego stanu.")
 
-    elif selected_sidebar_section == "Zwrot z Inwestycji (ROI)":
-        st.subheader("💡 Zwrot z Inwestycji (ROI)")
-        HARDWARE_COST_EST = 775.79  # Dokładny koszt zakupu całego inteligentnego systemu
-        df_base_sum = df[df["season"].str.contains("Bazowy", na=False)]["delta_units"].sum() if not df.empty else 0.0
-        total_saved_units = max(0.0, df_base_sum - total_apartment_units) if df_base_sum > 0 else 0.0
-        total_saved_pln = total_saved_units * EST_PLN_PER_UNIT
-        
-        payback_ratio = min(1.0, total_saved_pln / HARDWARE_COST_EST) if HARDWARE_COST_EST > 0 else 1.0
-        st.caption(f"Koszt całego inteligentnego systemu Sonoff: **{HARDWARE_COST_EST:.2f} PLN**")
-        st.progress(payback_ratio, text=f"Spłacono: {total_saved_pln:.2f} PLN ({payback_ratio*100:.1f}%)")
-
-        weekly_avg_cost = total_realtime_cost / weeks_logged_count if weeks_logged_count > 0 else 1.0
-        buffer_weeks = max(0.0, ssm_net_balance_to_date / weekly_avg_cost) if weekly_avg_cost > 0 else 0.0
-        st.caption(f"🛡️ Bufor bezpiecznego grzania z zaliczek: **{buffer_weeks:.1f} tyg.**")
+    elif selected_sidebar_section == "Generuj Raport SSM (HTML)":
+        st.subheader("📄 Generuj Raport SSM (HTML)")
+        html_report_content = f"""
+        <html>
+        <head><meta charset='utf-8'><title>Raport CO SSM - Bytków</title></head>
+        <body style='font-family: Arial, sans-serif; padding: 20px; color: #333;'>
+            <h2>Oficjalny Raport Rozliczeniowy Ciepła CO - SSM</h2>
+            <p><b>Lokalizacja:</b> {LOCATION_NAME}</p>
+            <p><b>Powierzchnia lokalu:</b> {APARTMENT_AREA_M2} m²</p>
+            <hr>
+            <h3>Podsumowanie Finansowe</h3>
+            <ul>
+                <li>Całkowity budżet zaliczkowy CO: <b>{SSM_ANNUAL_CO_BUDGET:.2f} PLN</b></li>
+                <li>Rzeczywisty koszt zużycia (Sonoff): <b>{total_realtime_cost:.2f} PLN</b></li>
+                <li>Aktualny bilans (względem zaliczek): <b>{ssm_net_balance_to_date:+.2f} PLN</b></li>
+                <li>Szacowany wynik końcowy sezonu: <b>{ssm_projected_refund_or_extra:+.2f} PLN</b></li>
+            </ul>
+            <p><i>Raport wygenerowany automatycznie przez system Sonoff Analytics.</i></p>
+        </body>
+        </html>
+        """
+        st.download_button(
+            label="📥 Pobierz Raport Rozliczeniowy (HTML)",
+            data=html_report_content.encode("utf-8"),
+            file_name=f"raport_co_ssm_{date.today()}.html",
+            mime="text/html",
+            use_container_width=True
+        )
 
     if not df.empty:
         st.markdown("---")
