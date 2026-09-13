@@ -18,12 +18,12 @@ st.set_page_config(
 )
 
 # --- CONSTANTS & CONFIGURATION ---
-APARTMENT_AREA = 66.54  # m2[cite: 1]
-SSM_CO_MONTHLY = 774.53  # PLN (zaliczka na CO)[cite: 1]
-SSM_RENT_NO_CO = 1121.87 # PLN (pozostałe opłaty bez CO)[cite: 1]
-SSM_TOTAL_RENT = 1896.40 # PLN[cite: 1]
+APARTMENT_AREA = 66.54  # m2
+SSM_CO_MONTHLY = 774.53  # PLN (zaliczka na CO)
+SSM_RENT_NO_CO = 1121.87 # PLN (pozostałe opłaty bez CO)
+SSM_TOTAL_RENT = 1896.40 # PLN
 
-# Location: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego 3[cite: 1]
+# Location: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego 3
 LATITUDE = 50.3168
 LONGITUDE = 18.9839
 
@@ -150,7 +150,7 @@ if app_mode == "📊 Dashboard Główny":
 elif app_mode == "🏠 Pokoje (Salon, Sypialnia, Dziecko)":
     st.markdown("### Zarządzanie Głowicami Sonoff TRVZB")
     
-    room = st.selectbox("Wybierz pomieszczenie:", ["Salon", "Sypialnia", "Pokój Dziecka", "Licznik Główny"])[cite: 1]
+    room = st.selectbox("Wybierz pomieszczenie:", ["Salon", "Sypialnia", "Pokój Dziecka", "Licznik Główny"])
     
     col1, col2 = st.columns(2)
     with col1:
@@ -175,13 +175,13 @@ elif app_mode == "📈 Analiza SSM vs Rzeczywiste":
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(f"""
-        * **Zaliczka CO (miesięcznie):** {SSM_CO_MONTHLY} PLN[cite: 1]
-        * **Pozostały czynsz:** {SSM_RENT_NO_CO} PLN[cite: 1]
-        * **Razem czynsz SSM:** {SSM_TOTAL_RENT} PLN[cite: 1]
+        * **Zaliczka CO (miesięcznie):** {SSM_CO_MONTHLY} PLN
+        * **Pozostały czynsz:** {SSM_RENT_NO_CO} PLN
+        * **Razem czynsz SSM:** {SSM_TOTAL_RENT} PLN
         """)
     with c2:
         st.markdown(f"""
-        * **Powierzchnia:** {APARTMENT_AREA} m²[cite: 1]
+        * **Powierzchnia:** {APARTMENT_AREA} m²
         * **Stawka jednostkowa SSM:** {round(SSM_CO_MONTHLY/APARTMENT_AREA, 2)} PLN/m²
         """)
         
@@ -214,4 +214,3 @@ elif app_mode == "⚙️ Konfiguracja & GitHub Sync":
     st.text_input("GitHub Branch", value="main")
     if st.button("Wymuś synchronizację z GitHub"):
         st.success("Zsynchronizowano pomyślnie!")
-```[cite: 1]
