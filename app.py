@@ -828,7 +828,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.header("💡 Zwrot z Inwestycji (ROI)")
-    HARDWARE_COST_EST = 550.0
+    HARDWARE_COST_EST = 775.79
     df_base_sum = df[df["season"].str.contains("Bazowy", na=False)]["delta_units"].sum() if not df.empty else 0.0
     total_saved_units = max(0.0, df_base_sum - total_apartment_units) if df_base_sum > 0 else 0.0
     total_saved_pln = total_saved_units * EST_PLN_PER_UNIT
