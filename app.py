@@ -18,25 +18,20 @@ st.set_page_config(
 )
 
 # --- CONSTANTS & CONFIGURATION ---
-APARTMENT_AREA = 66.54  # m2
-# SSM Official Rates (Spółdzielnia Mieszkaniowa)
-SSM_CO_MONTHLY = 774.53  # PLN (zaliczka na CO)
-SSM_RENT_NO_CO = 1121.87 # PLN (pozostałe opłaty bez CO)
-SSM_TOTAL_RENT = 1896.40 # PLN
+APARTMENT_AREA = 66.54  # m2[cite: 1]
+SSM_CO_MONTHLY = 774.53  # PLN (zaliczka na CO)[cite: 1]
+SSM_RENT_NO_CO = 1121.87 # PLN (pozostałe opłaty bez CO)[cite: 1]
+SSM_TOTAL_RENT = 1896.40 # PLN[cite: 1]
 
-# Location: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego 3
+# Location: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego 3[cite: 1]
 LATITUDE = 50.3168
 LONGITUDE = 18.9839
 
 # --- CSS & iOS 18 GLASSMORPHISM STYLING ---
 st.markdown("""
 <style>
-    .reportview-container {
-        background: #0e1117;
-    }
-    .main {
-        background: #0e1117;
-    }
+    .reportview-container { background: #0e1117; }
+    .main { background: #0e1117; }
     .card {
         background: rgba(255, 255, 255, 0.05);
         backdrop-filter: blur(10px);
@@ -59,17 +54,8 @@ st.markdown("""
         margin-bottom: 25px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }
-    .metric-value {
-        font-size: 24px;
-        font-weight: 700;
-        color: #00e676;
-    }
-    .metric-label {
-        font-size: 12px;
-        color: #b0bec5;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
+    .metric-value { font-size: 24px; font-weight: 700; color: #00e676; }
+    .metric-label { font-size: 12px; color: #b0bec5; text-transform: uppercase; letter-spacing: 1px; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -79,8 +65,7 @@ def get_weather_forecast():
         url = f"https://api.open-meteo.com/v1/forecast?latitude={LATITUDE}&longitude={LONGITUDE}&current=temperature_2m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min&timezone=Europe%2FWarsaw"
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
-            data = response.json()
-            return data
+            return response.json()
     except Exception:
         pass
     return None
@@ -134,7 +119,7 @@ def load_data():
         'Outdoor_Temp': np.random.normal(5, 4, len(dates))
     })
     df['Total_Consumption'] = df['Salon'] + df['Sypialnia'] + df['Pokoj_Dziecka']
-    df['Cost_PLN'] = df['Total_Consumption'] * 35.0  # mock unit cost
+    df['Cost_PLN'] = df['Total_Consumption'] * 35.0
     return df
 
 df_history = load_data()
@@ -145,7 +130,7 @@ if app_mode == "📊 Dashboard Główny":
     
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.markdown('<div class="card"><div class="metric-label">Zaliczka SSM / mc</div><div class="metric-value">774.53 PLN</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="card"><div class="metric-label">Zaliczka SSM / mc</div><div class="metric-value">{SSM_CO_MONTHLY} PLN</div></div>', unsafe_allow_html=True)
     with col2:
         st.markdown('<div class="card"><div class="metric-label">Szacunek Rzeczywisty</div><div class="metric-value">620.00 PLN</div></div>', unsafe_allow_html=True)
     with col3:
@@ -165,7 +150,7 @@ if app_mode == "📊 Dashboard Główny":
 elif app_mode == "🏠 Pokoje (Salon, Sypialnia, Dziecko)":
     st.markdown("### Zarządzanie Głowicami Sonoff TRVZB")
     
-    room = st.selectbox("Wybierz pomieszczenie:", ["Salon", "Sypialnia", "Pokój Dziecka", "Licznik Główny"])
+    room = st.selectbox("Wybierz pomieszczenie:", ["Salon", "Sypialnia", "Pokój Dziecka", "Licznik Główny"])[cite: 1]
     
     col1, col2 = st.columns(2)
     with col1:
@@ -190,17 +175,16 @@ elif app_mode == "📈 Analiza SSM vs Rzeczywiste":
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(f"""
-        * **Zaliczka CO (miesięcznie):** {SSM_CO_MONTHLY} PLN
-        * **Pozostały czynsz:** {SSM_RENT_NO_CO} PLN
-        * **Razem czynsz SSM:** {SSM_TOTAL_RENT} PLN
+        * **Zaliczka CO (miesięcznie):** {SSM_CO_MONTHLY} PLN[cite: 1]
+        * **Pozostały czynsz:** {SSM_RENT_NO_CO} PLN[cite: 1]
+        * **Razem czynsz SSM:** {SSM_TOTAL_RENT} PLN[cite: 1]
         """)
     with c2:
         st.markdown(f"""
-        * **Powierzchnia:** {APARTMENT_AREA} m²
+        * **Powierzchnia:** {APARTMENT_AREA} m²[cite: 1]
         * **Stawka jednostkowa SSM:** {round(SSM_CO_MONTHLY/APARTMENT_AREA, 2)} PLN/m²
         """)
         
-    # Comparative bar chart
     comparison_df = pd.DataFrame({
         'Miesiąc': ['Listopad', 'Grudzień', 'Styczeń', 'Luty', 'Marzec'],
         'Zaliczka SSM': [SSM_CO_MONTHLY]*5,
@@ -220,7 +204,7 @@ elif app_mode == "🔮 Symulator What-If & ROI":
     st.success(f"Szacowana roczna oszczędność przy obniżeniu o {drop_temp}°C wynosi ok. **{annual_savings:.2f} PLN**")
     
     st.markdown("#### Kalkulator ROI dla Głowic Sonoff TRVZB & Baterii Litowych")
-    cost_hardware = 450.0  # PLN inwestycji
+    cost_hardware = 450.0
     payback_months = (cost_hardware / (annual_savings / 12)) if annual_savings > 0 else 0
     st.metric("Szacowany okres zwrotu inwestycji", f"{payback_months:.1f} miesięcy")
 
@@ -230,3 +214,4 @@ elif app_mode == "⚙️ Konfiguracja & GitHub Sync":
     st.text_input("GitHub Branch", value="main")
     if st.button("Wymuś synchronizację z GitHub"):
         st.success("Zsynchronizowano pomyślnie!")
+```[cite: 1]
