@@ -8,12 +8,13 @@ import os
 from datetime import date, datetime, timedelta
 import requests
 import time
+import numpy as np
 
 # ---------------------------------------------------------
 # KONFIGURACJA STRONY I LOKALIZACJI
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="Sonoff Heating - iOS 18 Dynamic Analytics",
+    page_title="Sonoff Heating - iOS 18 Apple Home Analytics",
     page_icon="🔥",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -82,7 +83,7 @@ def get_weather_forecast():
     return []
 
 # ---------------------------------------------------------
-# STYLIZACJA W STYLU iOS 18 (Czysty, nowoczesny UI + Dynamic Island)
+# STYLIZACJA W STYLU iOS 18 + APPLE HOME THERMOSTAT WHEEL
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -212,6 +213,17 @@ st.markdown("""
         from { opacity: 0; transform: translateY(-10px); }
         to { opacity: 1; transform: translateY(0); }
     }
+
+    /* Apple Home Thermostat Circle Styling */
+    .apple-home-thermostat {
+        background: linear-gradient(135deg, #FF9500 0%, #FFCC00 100%);
+        border-radius: 30px;
+        padding: 24px;
+        color: white;
+        box-shadow: 0 15px 35px rgba(255, 149, 0, 0.3);
+        text-align: center;
+        margin-bottom: 22px;
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -219,10 +231,10 @@ st.markdown("""
 # KONFIGURACJA POMIESZCZEŃ I GITHUB
 # ---------------------------------------------------------
 ROOMS_CONFIG = {
-    "Salon": {"icon": "🛋️", "meter_default": "POD-SAL-2026"},
-    "Sypialnia": {"icon": "🛏️", "meter_default": "11420"},
-    "Pokój Dziecka": {"icon": "🧒", "meter_default": "11420"},
-    "Licznik Główny": {"icon": "🏢", "meter_default": "GJ-MAIN-2026"}
+    "Salon": {"icon": "🛋️", "meter_default": "POD-SAL-2026", "target_temp": 21.5},
+    "Sypialnia": {"icon": "🛏️", "meter_default": "11420", "target_temp": 19.5},
+    "Pokój Dziecka": {"icon": "🧒", "meter_default": "11420", "target_temp": 22.0},
+    "Licznik Główny": {"icon": "🏢", "meter_default": "GJ-MAIN-2026", "target_temp": 21.0}
 }
 
 SEASONS = ["2025/2026 (Bazowy)", "2026/2027 (Sonoff - Wtorki)"]
@@ -384,6 +396,10 @@ def get_tuesday_for_iso_week(year, week):
 
 df = load_data()
 
+# Inicjalizacja stanu nastaw temperatury dla pokoi w session_state
+if "room_target_temps" not in st.session_state:
+    st.session_state["room_target_temps"] = {r: cfg["target_temp"] for r, cfg in ROOMS_CONFIG.items()}
+
 # ---------------------------------------------------------
 # SPRAWDŹ CZY DZIŚ JEST WTOREK (Automatyczne okno alertu)
 # ---------------------------------------------------------
@@ -420,10 +436,10 @@ if "selected_room" not in st.session_state:
 
 current_room = st.session_state["selected_room"]
 
-st.title("🔥 Sonoff Smart Heating - Panel Sterowania & SSM Analytics")
+st.title("🔥 Sonoff Smart Heating - Apple Home & SSM Analytics")
 st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielni Mieszkaniowa (SSM)")
 
-# OBLICZENIA DLA BIEŻĄCEGO POKOJU I MIESZKANIA (Potrzebne do Dynamic Island)
+# OBLICZENIA DLA BIEŻĄCEGO POKOJU I MIESZKANIA
 df_room = df[df["room_name"] == current_room].sort_values(by=["date_entry", "id"]) if not df.empty else pd.DataFrame()
 df_room_sonoff = df_room[df_room["season"].str.contains("Sonoff", na=False)] if not df_room.empty else pd.DataFrame()
 
@@ -506,6 +522,36 @@ ssm_advance_per_m2_to_date = ssm_paid_advances_to_date / APARTMENT_AREA_M2
 room_share_pct = 100.0 if current_room == "Licznik Główny" else ((total_delta_room / total_apartment_units * 100) if total_apartment_units > 0 else 0.0)
 
 # ---------------------------------------------------------
+# APPLE HOME STYLE INTERACTIVE THERMOSTAT WIDGET
+# ---------------------------------------------------------
+st.markdown("### 🏠 Apple Home – Sterowanie Głowicą Sonoff TRVZB")
+th_col1, th_col2 = st.columns([1.2, 2])
+
+with th_col1:
+    current_target = st.session_state["room_target_temps"][current_room]
+    # Interaktywny widget suwaka stylizowany na koło termostatu Apple Home
+    new_target = st.slider(
+        f"Nastawa temperatury ({current_room}) [°C]", 
+        min_value=15.0, 
+        max_value=28.0, 
+        value=float(current_target), 
+        step=0.5,
+        help="Przesuń, aby zmienić docelową temperaturę dla zaworu Sonoff TRVZB."
+    )
+    st.session_state["room_target_temps"][current_room] = new_target
+
+with th_col2:
+    st.markdown(f"""
+    <div class="apple-home-thermostat">
+        <div style="font-size: 13px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; opacity: 0.9;">Apple Home Kit — Aktywny Termostat</div>
+        <div style="font-size: 48px; font-weight: 900; margin: 5px 0;">{new_target:.1f}°C</div>
+        <div style="font-size: 14px;">Strefa: <b>{current_room}</b> | Status: <span style="background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 8px;">Grzanie aktywne 🔥</span></div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("<br>", unsafe_allow_html=True)
+
+# ---------------------------------------------------------
 # AUTOMATYCZNE OKNO (MODAL) DLA WTORKOWYCH ODCZYTÓW
 # ---------------------------------------------------------
 if is_tuesday:
@@ -523,7 +569,7 @@ if is_tuesday:
                 m_input = st.text_input("Numer Podzielnika", value=last_meter)
                 u_s = st.number_input("Stały Stan Początkowy Sezonu", min_value=0.0, value=val_start, disabled=True)
                 u_e = st.number_input("Wartość Końcowa (Z dzisiejszego wtorku)", min_value=0.0, value=max(val_end, val_start), step=0.1)
-                t_in_modal = st.number_input("Temperatura w pomieszczeniu [°C]", min_value=10.0, max_value=30.0, value=21.0, step=0.1)
+                t_in_modal = st.number_input("Temperatura w pomieszczeniu [°C]", min_value=10.0, max_value=30.0, value=new_target, step=0.1)
                 m_tag = st.selectbox("Tryb pracy grzania", MODES, index=0)
                 
                 col_g1, col_g2 = st.columns(2)
@@ -698,7 +744,7 @@ with st.sidebar:
         st.markdown("##### 🔢 Stan Podzielnika [U]")
         u_start = st.number_input("Stały Stan Początkowy Sezonu", min_value=0.0, value=val_start, disabled=True)
         u_end = st.number_input("Wartość Końcowa (z Wtorku)", min_value=0.0, value=max(val_end, val_start), step=0.1)
-        temp_in_input = st.number_input("Temp. w pomieszczeniu [°C]", min_value=10.0, max_value=30.0, value=21.0, step=0.1)
+        temp_in_input = st.number_input("Temp. w pomieszczeniu [°C]", min_value=10.0, max_value=30.0, value=new_target, step=0.1)
         mode_input = st.selectbox("Tryb pracy / Tag", MODES, index=0)
         
         st.markdown("---")
@@ -707,7 +753,7 @@ with st.sidebar:
         gj_e = st.number_input("GJ Koniec", min_value=0.0, value=0.0, step=0.01)
 
         entry_date = st.date_input("Data wpisu", tuesday_date)
-        notes = st.text_input("Nastawa / Uwagi", value="Sonoff Auto 20.5°C")
+        notes = st.text_input("Nastawa / Uwagi", value=f"Apple Home {new_target}°C")
 
         if st.form_submit_button("⚡ Zapisz i Synchronizuj", use_container_width=True):
             prev_val_end = val_end if not df_room_sonoff.empty else val_start
@@ -850,12 +896,13 @@ with st.sidebar:
             st.rerun()
 
 # ---------------------------------------------------------
-# ZAKŁADKI ANALITYCZNE
+# ZAKŁADKI ANALITYCZNE (W TYM NOWY WYKRES DEGRESJI I KOSZTÓW MARGINALNYCH)
 # ---------------------------------------------------------
-tab_charts, tab_season_comp, tab_analytics, tab_ai_pred, tab_history = st.tabs([
+tab_charts, tab_season_comp, tab_analytics, tab_degression, tab_ai_pred, tab_history = st.tabs([
     "📈 Wykres, Skumulowany & Pogoda", 
     "📊 Porównanie Sezonów i Koszt Narastający",
     "💸 Zyski i Straty & Heatmapa", 
+    "📉 Degresja & Koszty Marginalne",
     "🤖 Predykcja AI i Raport", 
     "📋 Historia i Edycja Wpisów"
 ])
@@ -1031,6 +1078,43 @@ with tab_analytics:
             st.plotly_chart(fig_heat, use_container_width=True)
     else:
         st.info("Brak danych analitycznych.")
+
+with tab_degression:
+    st.markdown("### 📉 Analiza Degresji i Kosztów Marginalnych Ogrzewania")
+    st.caption("Zaawansowany model statystyczny mapujący zależność między gradientem temperatury zewnętrznej a narastającym kosztem marginalnym dla każdej strefy.")
+
+    if not df.empty:
+        df_deg = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")].copy()
+        if not df_deg.empty:
+            # Obliczenie kosztu marginalnego na stopień mrozu (różnica temperatury bazowej 20°C a temp zewn)
+            df_deg["temp_gradient"] = 20.0 - df_deg["temp_zewnetrzna"]
+            df_deg["marginal_cost_pln"] = df_deg["delta_units"] * EST_PLN_PER_UNIT
+            
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                fig_deg = px.scatter(
+                    df_deg, x="temp_gradient", y="marginal_cost_pln", color="room_name",
+                    trendline="ols", title="Koszt marginalny vs Gradient temperatury (20°C - T.zewn)",
+                    labels={"temp_gradient": "Gradient Mrozu [°C]", "marginal_cost_pln": "Koszt Tygodniowy [PLN]", "room_name": "Strefa"}
+                )
+                fig_deg.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350)
+                st.plotly_chart(fig_deg, use_container_width=True)
+
+            with col_d2:
+                # Wykres degresji - efektywność energetyczna stref
+                df_eff = df_deg.groupby("room_name").agg({"delta_units": "sum", "temp_wewnetrzna": "mean"}).reset_index()
+                fig_eff = px.bar(
+                    df_eff, x="room_name", y="delta_units", color="temp_wewnetrzna",
+                    title="Całkowite zużycie strefy a średnia temp. wewnętrzna",
+                    labels={"room_name": "Strefa", "delta_units": "Suma Zużycia [U]", "temp_wewnetrzna": "Śr. Temp. Wewn. [°C]"},
+                    color_continuous_scale="Viridis"
+                )
+                fig_eff.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=350)
+                st.plotly_chart(fig_eff, use_container_width=True)
+        else:
+            st.info("Brak danych w sezonie Sonoff do obliczenia degresji.")
+    else:
+        st.info("Baza danych jest pusta.")
 
 with tab_ai_pred:
     st.markdown("### 🤖 Predykcja AI, Wykrywanie Anomalii & Prędkościomierz Budżetowy SSM")
