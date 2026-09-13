@@ -684,7 +684,7 @@ with st.sidebar:
                     st.rerun()
 
     st.markdown("---")
-    st.header("🌤️ Prognoza 7D (Bytków) & Sonoff AI")[cite: 2]
+   st.header("🌤️ Prognoza 7D (Bytków) & Sonoff AI")
     forecast_list = get_weather_forecast()
     
     if forecast_list:
