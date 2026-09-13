@@ -41,33 +41,25 @@ LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 
 # POBIERANIE POGODY I PROGNOZY Z OPENWEATHERMAP
 # ---------------------------------------------------------
 def get_outdoor_temp():
-    # Wpisz swój klucz bezpośrednio tutaj w cudzysłowie:
-    api_key = "a10eb9dbf3db0ee12974f753113dd9c8" 
-    city = "Bytków" # lub Siemianowice Śląskie
-    
-    url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric"
-    
+    api_key = "a10eb9dbf3db0ee12974f753113dd9c8"
+    lat = 50.3168
+    lon = 18.9839
     try:
-        response = requests.get(url)
-        data = response.json()
-        
-        # Sprawdzenie czy zapytanie się powiodło (kod 200)
-        if response.status_code == 200:
-            return data["main"]["temp"]
-        else:
-            print(f"Błąd API: {data.get('message', 'Nieznany błąd')}")
-            return 12.5  # Awaryjna wartość w razie błędu
-    except Exception as e:
-        print(f"Błąd połączenia: {e}")
-        return 12.5
+        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+        res = requests.get(url, timeout=4)
+        if res.status_code == 200:
+            return float(res.json()['main']['temp'])
+    except Exception:
+        pass
+    return 12.5
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def get_weather_forecast():
-    api_key = st.secrets.get("openweathermap", {}).get("api_key", None)
-    if not api_key:
-        return []
+    api_key = "TUTAJ_WKLEJ_SWÓJ_KLUCZ_API"
+    lat = 50.3168
+    lon = 18.9839
     try:
-        url = f"https://api.openweathermap.org/data/2.5/forecast?lat={LAT_LOCATION}&lon={LON_LOCATION}&appid={api_key}&units=metric"
+        url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
         res = requests.get(url, timeout=5)
         if res.status_code == 200:
             data = res.json()
@@ -76,7 +68,6 @@ def get_weather_forecast():
             for item in data.get('list', []):
                 dt_txt = item['dt_txt']
                 date_str = dt_txt.split(' ')[0]
-                # Pobieramy wpis najbliższy południu lub pierwszy dostępny dla danego dnia
                 if date_str not in seen_dates and ("12:00:00" in dt_txt or len(seen_dates) == 0):
                     seen_dates.add(date_str)
                     forecasts.append({
