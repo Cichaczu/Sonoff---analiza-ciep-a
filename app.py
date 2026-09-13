@@ -217,7 +217,7 @@ elif app_mode == "🔮 Symulator What-If & ROI":
     
     drop_temp = st.slider("Obniżenie temperatury bazowej (°C)", 0.0, 3.0, 1.0, 0.5)
     annual_savings = drop_temp * 180.0
-    st.success(arh := f"Szacowana roczna oszczędność przy obniżeniu o {drop_temp}°C wynosi ok. **{annual_savings:.2f} PLN**")
+    st.success(f"Szacowana roczna oszczędność przy obniżeniu o {drop_temp}°C wynosi ok. **{annual_savings:.2f} PLN**")
     
     st.markdown("#### Kalkulator ROI dla Głowic Sonoff TRVZB & Baterii Litowych")
     cost_hardware = 450.0  # PLN inwestycji
@@ -230,4 +230,3 @@ elif app_mode == "⚙️ Konfiguracja & GitHub Sync":
     st.text_input("GitHub Branch", value="main")
     if st.button("Wymuś synchronizację z GitHub"):
         st.success("Zsynchronizowano pomyślnie!")
-```[cite: 1]
