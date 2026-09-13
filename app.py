@@ -20,7 +20,6 @@ st.set_page_config(
 )
 
 FILE_PATH = "data/consumption.csv"
-EST_PLN_PER_UNIT = 2.45
 APARTMENT_AREA_M2 = 66.54  # Dokładna powierzchnia lokalu
 
 # Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m² (Wrzesień 2026)
@@ -83,7 +82,7 @@ def get_weather_forecast():
     return []
 
 # ---------------------------------------------------------
-# STYLIZACJA W STYLU iOS 18 (Czysty, nowoczesny UI)
+# STYLIZACJA W STYLU iOS 18 (Czysty, nowoczesny UI + Dynamic Island)
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -95,6 +94,36 @@ st.markdown("""
     }
     .main { 
         background: linear-gradient(180deg, #F2F2F7 0%, #E5E5EA 100%) !important; 
+    }
+
+    /* iOS 18 Dynamic Island Widget Style */
+    .ios-dynamic-island {
+        background: #000000;
+        color: #FFFFFF;
+        border-radius: 28px;
+        padding: 10px 22px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        max-width: 820px;
+        margin: 0 auto 20px auto;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
+        font-size: 14px;
+        font-weight: 500;
+        letter-spacing: -0.2px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .island-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .island-dot {
+        width: 8px;
+        height: 8px;
+        background-color: #34C759;
+        border-radius: 50%;
+        box-shadow: 0 0 8px #34C759;
     }
 
     .ios-room-info-card {
@@ -227,6 +256,7 @@ def create_initial_df():
             "gj_end": 0.0,
             "delta_gj": 0.0,
             "temp_zewnetrzna": 14.2,
+            "temp_wewnetrzna": 20.5,
             "mode_tag": "Standard (Automatyczny)",
             "notes": "Stan zero - wrzesień 2026"
         },
@@ -245,6 +275,7 @@ def create_initial_df():
             "gj_end": 0.0,
             "delta_gj": 0.0,
             "temp_zewnetrzna": 14.2,
+            "temp_wewnetrzna": 20.8,
             "mode_tag": "Standard (Automatyczny)",
             "notes": "Stan zero - wrzesień 2026"
         },
@@ -263,6 +294,7 @@ def create_initial_df():
             "gj_end": 62.82,
             "delta_gj": 62.82,
             "temp_zewnetrzna": 6.5,
+            "temp_wewnetrzna": 20.0,
             "mode_tag": "Standard (Automatyczny)",
             "notes": "Oficjalne dane zużycia 62.82 GJ"
         }
@@ -283,10 +315,28 @@ def load_data():
         df = load_local_fallback()
     
     if df is not None and not df.empty:
-        if "temp_zewnetrzna" not in df.columns:
-            df["temp_zewnetrzna"] = 12.0
-        if "mode_tag" not in df.columns:
-            df["mode_tag"] = "Standard (Automatyczny)"
+        required_columns = {
+            "id": 1,
+            "season": "2026/2027 (Sonoff - Wtorki)",
+            "week_num": 37,
+            "period_label": "Tydzień 37",
+            "date_entry": str(date.today()),
+            "room_name": "Sypialnia",
+            "meter_number": "11420",
+            "units_start": 0.0,
+            "units_end": 0.0,
+            "delta_units": 0.0,
+            "gj_start": 0.0,
+            "gj_end": 0.0,
+            "delta_gj": 0.0,
+            "temp_zewnetrzna": 12.0,
+            "temp_wewnetrzna": 20.5,
+            "mode_tag": "Standard (Automatyczny)",
+            "notes": ""
+        }
+        for col, default_val in required_columns.items():
+            if col not in df.columns:
+                df[col] = default_val
             
     return df
 
@@ -349,6 +399,20 @@ if "fancy_alert" in st.session_state:
         del st.session_state["fancy_alert"]
 
 # ---------------------------------------------------------
+# PANEL BOCZNY: KONTROLA I SUWAK STAWKI JEDNOSTKOWEJ
+# ---------------------------------------------------------
+with st.sidebar:
+    st.header("⚙️ Ustawienia Symulacji")
+    EST_PLN_PER_UNIT = st.slider(
+        "Stawka jednostkowa [PLN / U]", 
+        min_value=1.00, 
+        max_value=5.00, 
+        value=2.45, 
+        step=0.05,
+        help="Dynamiczna zmiana kosztu jednej jednostki zużycia (U)."
+    )
+
+# ---------------------------------------------------------
 # NAWIGACJA GŁÓWNA I NAGŁÓWEK
 # ---------------------------------------------------------
 if "selected_room" not in st.session_state:
@@ -357,7 +421,57 @@ if "selected_room" not in st.session_state:
 current_room = st.session_state["selected_room"]
 
 st.title("🔥 Sonoff Smart Heating - Panel Sterowania & SSM Analytics")
-st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielnia Mieszkaniowa (SSM)")
+st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielni Mieszkaniowa (SSM)")
+
+# OBLICZENIA DLA BIEŻĄCEGO POKOJU I MIESZKANIA (Potrzebne do Dynamic Island)
+df_room = df[df["room_name"] == current_room].sort_values(by=["date_entry", "id"]) if not df.empty else pd.DataFrame()
+df_room_sonoff = df_room[df_room["season"].str.contains("Sonoff", na=False)] if not df_room.empty else pd.DataFrame()
+
+if not df_room_sonoff.empty:
+    val_start = float(df_room_sonoff.iloc[0]["units_start"])
+    last_row = df_room_sonoff.iloc[-1]
+    val_end = float(last_row.get("units_end", val_start))
+    last_meter = str(last_row.get("meter_number", ROOMS_CONFIG[current_room]["meter_default"]))
+    last_date = str(last_row.get("date_entry", "Brak"))
+    total_delta_room = df_room_sonoff["delta_units"].sum()
+else:
+    val_start = 110.4 if current_room == "Pokój Dziecka" else (126.7 if current_room == "Sypialnia" else 0.0)
+    val_end = val_start
+    last_meter = ROOMS_CONFIG[current_room]["meter_default"]
+    last_date = "Brak odczytów"
+    total_delta_room = 0.0
+
+last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty else 0.0
+live_outdoor_temp = get_outdoor_temp()
+
+if current_room == "Licznik Główny":
+    df_sonoff_all_rooms = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")]
+    total_delta_room = df_sonoff_all_rooms["delta_units"].sum() if not df_sonoff_all_rooms.empty else 0.0
+    val_start = 0.0
+    val_end = total_delta_room
+    last_meter = "GJ-MAIN-SUMA"
+
+df_sonoff_all = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")] if not df.empty else pd.DataFrame()
+if df_sonoff_all.empty:
+    df_sonoff_all = df[df["season"].str.contains("Sonoff", na=False)] if not df.empty else pd.DataFrame()
+
+total_apartment_units = df_sonoff_all["delta_units"].sum() if not df_sonoff_all.empty else 0.0
+total_realtime_cost = total_apartment_units * EST_PLN_PER_UNIT
+weeks_logged_count = max(1, df_sonoff_all["week_num"].nunique()) if not df_sonoff_all.empty else 1
+ssm_paid_advances_to_date = (weeks_logged_count / SSM_TOTAL_WEEKS) * SSM_ANNUAL_CO_BUDGET
+ssm_net_balance_to_date = ssm_paid_advances_to_date - total_realtime_cost
+
+# iOS 18 Dynamic Island Status Bar
+island_status_color = "#34C759" if ssm_net_balance_to_date >= 0 else "#FF3B30"
+island_balance_txt = f"+{ssm_net_balance_to_date:.1f} zł" if ssm_net_balance_to_date >= 0 else f"{ssm_net_balance_to_date:.1f} zł"
+
+st.markdown(f"""
+<div class="ios-dynamic-island">
+    <div class="island-item"><div class="island-dot"></div><span>Strefa: <b>{current_room}</b></span></div>
+    <div class="island-item"><span>🌡️ Bytków: <b>{live_outdoor_temp}°C</b></span></div>
+    <div class="island-item"><span>Bilans SSM: <b style="color: {island_status_color};">{island_balance_txt}</b></span></div>
+</div>
+""", unsafe_allow_html=True)
 
 # Wyświetlenie fancy powiadomienia, jeśli jest aktywne
 if "fancy_alert" in st.session_state:
@@ -383,49 +497,7 @@ for idx, (room_key, info) in enumerate(ROOMS_CONFIG.items()):
 
 st.divider()
 
-# ---------------------------------------------------------
-# OBLICZENIA DLA BIEŻĄCEGO POKOJU I MIESZKANIA
-# ---------------------------------------------------------
-df_room = df[df["room_name"] == current_room].sort_values(by=["date_entry", "id"]) if not df.empty else pd.DataFrame()
-df_room_sonoff = df_room[df_room["season"].str.contains("Sonoff", na=False)] if not df_room.empty else pd.DataFrame()
-
-if not df_room_sonoff.empty:
-    val_start = float(df_room_sonoff.iloc[0]["units_start"])
-    last_row = df_room_sonoff.iloc[-1]
-    val_end = float(last_row.get("units_end", val_start))
-    last_meter = str(last_row.get("meter_number", ROOMS_CONFIG[current_room]["meter_default"]))
-    last_date = str(last_row.get("date_entry", "Brak"))
-    total_delta_room = df_room_sonoff["delta_units"].sum()
-else:
-    val_start = 110.4 if current_room == "Pokój Dziecka" else (126.7 if current_room == "Sypialnia" else 0.0)
-    val_end = val_start
-    last_meter = ROOMS_CONFIG[current_room]["meter_default"]
-    last_date = "Brak odczytów"
-    total_delta_room = 0.0
-
-last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty else 0.0
-live_outdoor_temp = get_outdoor_temp()
-
-# JEDNOZNACZNA LOGIKA: Licznik Główny to suma wszystkich pokoi (Salon + Sypialnia + Pokój Dziecka)
-if current_room == "Licznik Główny":
-    df_sonoff_all_rooms = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")]
-    total_delta_room = df_sonoff_all_rooms["delta_units"].sum() if not df_sonoff_all_rooms.empty else 0.0
-    val_start = 0.0
-    val_end = total_delta_room
-    last_meter = "GJ-MAIN-SUMA"
-
-# Obliczenia dla całego mieszkania (Sezon Sonoff)
-df_sonoff_all = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")] if not df.empty else pd.DataFrame()
-if df_sonoff_all.empty:
-    df_sonoff_all = df[df["season"].str.contains("Sonoff", na=False)] if not df.empty else pd.DataFrame()
-
-total_apartment_units = df_sonoff_all["delta_units"].sum() if not df_sonoff_all.empty else 0.0
-total_realtime_cost = total_apartment_units * EST_PLN_PER_UNIT
-
-weeks_logged_count = max(1, df_sonoff_all["week_num"].nunique()) if not df_sonoff_all.empty else 1
-
-ssm_paid_advances_to_date = (weeks_logged_count / SSM_TOTAL_WEEKS) * SSM_ANNUAL_CO_BUDGET
-ssm_net_balance_to_date = ssm_paid_advances_to_date - total_realtime_cost
+# Obliczenia dalsze dla całego mieszkania
 ssm_projected_full_season_cost = (total_realtime_cost / weeks_logged_count) * SSM_TOTAL_WEEKS
 ssm_projected_refund_or_extra = SSM_ANNUAL_CO_BUDGET - ssm_projected_full_season_cost
 
@@ -445,12 +517,13 @@ if is_tuesday:
 
     if not already_added_this_week:
         with st.expander(f"🚨 WTOREK – Wymagany Odczyt dla strefy: {current_room} (Tydzień {current_iso_w})", expanded=True):
-            st.warning(f"Dziś jest wtorek! Podaj aktualny stan podzielnika dla strefy **{current_room}**, aby zsynchronizować aplikację.")
+            st.warning(f"Dziś jest wtorek! Podaj aktualny stan podzielnika oraz temperaturę wewnętrzną dla strefy **{current_room}**.")
             
             with st.form("auto_tuesday_modal_form"):
                 m_input = st.text_input("Numer Podzielnika", value=last_meter)
                 u_s = st.number_input("Stały Stan Początkowy Sezonu", min_value=0.0, value=val_start, disabled=True)
                 u_e = st.number_input("Wartość Końcowa (Z dzisiejszego wtorku)", min_value=0.0, value=max(val_end, val_start), step=0.1)
+                t_in_modal = st.number_input("Temperatura w pomieszczeniu [°C]", min_value=10.0, max_value=30.0, value=21.0, step=0.1)
                 m_tag = st.selectbox("Tryb pracy grzania", MODES, index=0)
                 
                 col_g1, col_g2 = st.columns(2)
@@ -490,6 +563,7 @@ if is_tuesday:
                             "gj_end": gj_e_m,
                             "delta_gj": delta_g_m,
                             "temp_zewnetrzna": live_outdoor_temp,
+                            "temp_wewnetrzna": t_in_modal,
                             "mode_tag": m_tag,
                             "notes": modal_notes
                         }])
@@ -526,7 +600,7 @@ st.markdown(f"""
             <div style="font-size: 13px; color: #8E8E93; margin-top: 2px;">ℹ️ {room_desc_subtitle}</div>
         </div>
         <div class="ios-live-badge">
-            🌡️ Temp. zewn. (Bytków): <b style="color: #007AFF;">{live_outdoor_temp}°C</b> &nbsp;|&nbsp; 📊 Udział w mieszkaniu: <b style="color: #AF52DE;">{room_share_pct:.1f}%</b>
+            🌡️ Zewn. (Bytków): <b style="color: #007AFF;">{live_outdoor_temp}°C</b> &nbsp;|&nbsp; Udział: <b style="color: #AF52DE;">{room_share_pct:.1f}%</b>
         </div>
     </div>
     <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;">
@@ -602,7 +676,7 @@ with kpi_col3:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# SIDEBAR: FORMULARZ + SYMULATOR + PROGNOZA POGODY 7D + ROI
+# SIDEBAR: FORMULARZ + SYMULATOR + PROGNOZA POGODY 7D + RAPORT HTML
 # ---------------------------------------------------------
 with st.sidebar:
     st.header("📥 Nowy Odczyt (Ręczny)")
@@ -624,6 +698,7 @@ with st.sidebar:
         st.markdown("##### 🔢 Stan Podzielnika [U]")
         u_start = st.number_input("Stały Stan Początkowy Sezonu", min_value=0.0, value=val_start, disabled=True)
         u_end = st.number_input("Wartość Końcowa (z Wtorku)", min_value=0.0, value=max(val_end, val_start), step=0.1)
+        temp_in_input = st.number_input("Temp. w pomieszczeniu [°C]", min_value=10.0, max_value=30.0, value=21.0, step=0.1)
         mode_input = st.selectbox("Tryb pracy / Tag", MODES, index=0)
         
         st.markdown("---")
@@ -664,6 +739,7 @@ with st.sidebar:
                     "gj_end": gj_e,
                     "delta_gj": delta_g,
                     "temp_zewnetrzna": live_outdoor_temp,
+                    "temp_wewnetrzna": temp_in_input,
                     "mode_tag": mode_input,
                     "notes": notes
                 }])
@@ -683,6 +759,35 @@ with st.sidebar:
                     }
                     st.success("Zapisano i zsynchronizowano pomyślnie!")
                     st.rerun()
+
+    st.markdown("---")
+    st.header("📄 Generuj Raport SSM (HTML)")
+    html_report_content = f"""
+    <html>
+    <head><meta charset='utf-8'><title>Raport CO SSM - Bytków</title></head>
+    <body style='font-family: Arial, sans-serif; padding: 20px; color: #333;'>
+        <h2>Oficjalny Raport Rozliczeniowy Ciepła CO - SSM</h2>
+        <p><b>Lokalizacja:</b> {LOCATION_NAME}</p>
+        <p><b>Powierzchnia lokalu:</b> {APARTMENT_AREA_M2} m²</p>
+        <hr>
+        <h3>Podsumowanie Finansowe</h3>
+        <ul>
+            <li>Całkowity budżet zaliczkowy CO: <b>{SSM_ANNUAL_CO_BUDGET:.2f} PLN</b></li>
+            <li>Rzeczywisty koszt zużycia (Sonoff): <b>{total_realtime_cost:.2f} PLN</b></li>
+            <li>Aktualny bilans (względem zaliczek): <b>{ssm_net_balance_to_date:+.2f} PLN</b></li>
+            <li>Szacowany wynik końcowy sezonu: <b>{ssm_projected_refund_or_extra:+.2f} PLN</b></li>
+        </ul>
+        <p><i>Raport wygenerowany automatycznie przez system Sonoff Analytics.</i></p>
+    </body>
+    </html>
+    """
+    st.download_button(
+        label="📥 Pobierz Raport Rozliczeniowy (HTML)",
+        data=html_report_content.encode("utf-8"),
+        file_name=f"raport_co_ssm_{date.today()}.html",
+        mime="text/html",
+        use_container_width=True
+    )
 
     st.markdown("---")
     st.header("🌤️ Prognoza 7D (Bytków) & Sonoff AI")
@@ -742,15 +847,6 @@ with st.sidebar:
             df = df.iloc[:-1]
             save_data(df, "Cofnięcie ostatniego wpisu (Undo)")
             st.warning("Usunięto ostatni wpis z bazy!")
-            st.rerun()
-
-    st.markdown("---")
-    with st.expander("🛠️ Panel Debug & Opcje Zaawansowane"):
-        st.warning("Opcje bezpośrednie – brak wymogu podawania PIN-u.")
-        if st.button("🔄 Reset bazy do stanu początkowego", use_container_width=True):
-            df_reset = create_initial_df()
-            save_data(df_reset, "Reset bazy do stanu zero")
-            st.success("Zresetowano bazę pomyślnie!")
             st.rerun()
 
 # ---------------------------------------------------------
@@ -859,11 +955,8 @@ with tab_season_comp:
 
         st.markdown("---")
         st.markdown("#### 📐 Narastający Koszt Ogrzewania na 1 m² Lokalu vs Średnia Stawka SSM")
-        st.caption(f"Porównanie faktycznego kosztu CO w przeliczeniu na 1 m² ({APARTMENT_AREA_M2} m²) względem limitu narastającego zaliczki spółdzielczej.")
-
         df_m2_cum = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")].groupby("week_num")["delta_units"].sum().cumsum().reset_index()
         df_m2_cum["cost_per_m2"] = (df_m2_cum["delta_units"] * EST_PLN_PER_UNIT) / APARTMENT_AREA_M2
-        
         df_m2_cum["ssm_limit_per_m2"] = df_m2_cum.index.map(lambda i: ( (i+1) / SSM_TOTAL_WEEKS ) * (SSM_ANNUAL_CO_BUDGET / APARTMENT_AREA_M2))
 
         fig_m2_trend = px_go.Figure()
@@ -884,73 +977,6 @@ with tab_season_comp:
             height=340, legend=dict(orientation="h", y=1.15, x=0.0)
         )
         st.plotly_chart(fig_m2_trend, use_container_width=True)
-
-        st.markdown("---")
-        st.markdown("#### 🏢 Struktura Opłat Całkowitych (Czynsz SSM vs Rzeczywisty Koszt CO)")
-        st.caption(f"Porównanie miesięczne opłat stałych (eksploatacja, woda, fundusz: **{SSM_NON_HEATING_RENT:.2f} PLN**), zaliczki na CO (**{SSM_CO_MONTHLY_ADVANCE:.2f} PLN**) oraz **rzeczywistego poboru ciepła Sonoff**.")
-
-        weeks_in_data = sorted(df_sonoff_all["week_num"].unique()) if not df_sonoff_all.empty else [37]
-        
-        chart_data_rent = []
-        for w in weeks_in_data:
-            w_units = df_sonoff_all[df_sonoff_all["week_num"] == w]["delta_units"].sum() if not df_sonoff_all.empty else 0.0
-            w_co_cost_real = w_units * EST_PLN_PER_UNIT
-            w_co_advance = SSM_CO_MONTHLY_ADVANCE / 4.28
-            w_fixed_rent = SSM_NON_HEATING_RENT / 4.28
-            w_total_rent_advance = w_fixed_rent + w_co_advance
-            w_total_rent_actual = w_fixed_rent + w_co_cost_real
-            
-            chart_data_rent.append({
-                "Tydzień": f"Tydzień {w}",
-                "Opłaty Stałe (Czynsz bez CO)": round(w_fixed_rent, 2),
-                "Zaliczka CO (SSM)": round(w_co_advance, 2),
-                "Rzeczywiste CO (Sonoff)": round(w_co_cost_real, 2),
-                "Czynsz Całkowity z Zaliczką": round(w_total_rent_advance, 2),
-                "Rzeczywisty Czynsz z Sonoff": round(w_total_rent_actual, 2),
-                "Udział CO w Czynszu (%)": round((w_co_cost_real / w_total_rent_actual * 100) if w_total_rent_actual > 0 else 0, 1)
-            })
-
-        df_rent_chart = pd.DataFrame(chart_data_rent)
-
-        col_r1, col_r2 = st.columns([2, 1])
-        with col_r1:
-            fig_total_fees = px_go.Figure()
-            fig_total_fees.add_trace(px_go.Bar(
-                x=df_rent_chart["Tydzień"], y=df_rent_chart["Opłaty Stałe (Czynsz bez CO)"],
-                name="Opłaty Stałe SSM (Eksploatacja/Woda)", marker_color="#8E8E93"
-            ))
-            fig_total_fees.add_trace(px_go.Bar(
-                x=df_rent_chart["Tydzień"], y=df_rent_chart["Rzeczywiste CO (Sonoff)"],
-                name="Rzeczywisty Koszt CO (Sonoff)", marker_color="#007AFF"
-            ))
-            fig_total_fees.add_trace(px_go.Scatter(
-                x=df_rent_chart["Tydzień"], y=df_rent_chart["Czynsz Całkowity z Zaliczką"],
-                name="Wpłacany Czynsz Całkowity (z Zaliczką CO)", mode="lines+markers",
-                line=dict(color="#FF9500", width=3, dash="dash")
-            ))
-
-            fig_total_fees.update_layout(
-                barmode="stack",
-                title="Tygodniowy Czynsz Rzeczywisty vs Wpłacany do Spółdzielni [PLN]",
-                xaxis_title="Tydzień", yaxis_title="Kwota PLN",
-                template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)',
-                height=340, legend=dict(orientation="h", y=1.15, x=0.0)
-            )
-            st.plotly_chart(fig_total_fees, use_container_width=True)
-
-        with col_r2:
-            avg_co_real = df_rent_chart["Rzeczywiste CO (Sonoff)"].mean() if not df_rent_chart.empty else 0.0
-            fixed_rent_weekly = SSM_NON_HEATING_RENT / 4.28
-            
-            fig_rent_pie = px.pie(
-                values=[fixed_rent_weekly, avg_co_real],
-                names=["Opłaty Stałe SSM", "Ogrzewanie CO (Sonoff)"],
-                hole=0.5,
-                title="Udział CO w Całkowitym Czynszu",
-                color_discrete_sequence=["#8E8E93", "#007AFF"]
-            )
-            fig_rent_pie.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=340)
-            st.plotly_chart(fig_rent_pie, use_container_width=True)
 
     else:
         st.info("Brak wystarczających danych do porównania sezonów.")
@@ -992,18 +1018,16 @@ with tab_analytics:
                 )
                 fig_pie.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=320)
                 st.plotly_chart(fig_pie, use_container_width=True)
-            else:
-                st.info("Brak danych o trybach pracy.")
 
         st.markdown("---")
-        st.markdown("#### 🔥 Macierz Korelacji (Temperatura Zewnętrzna vs Zużycie Mieszkania)")
-        if len(df_sonoff) >= 2:
-            fig_heat = px.density_heatmap(
-                df_sonoff, x="temp_zewnetrzna", y="delta_units", z="delta_units",
-                histfunc="avg", title="Intensywność poboru energii w zależności od temperatury na zewnątrz",
-                labels={"temp_zewnetrzna": "Temp. Zewnętrzna [°C]", "delta_units": "Średnie Zużycie Strefy [U]"}
+        st.markdown("#### 🔥 Macierz Korelacji (Temperatura Wewnętrzna vs Zewnętrzna)")
+        if len(df_sonoff) >= 2 and "temp_wewnetrzna" in df_sonoff.columns:
+            fig_heat = px.scatter(
+                df_sonoff, x="temp_zewnetrzna", y="temp_wewnetrzna", size="delta_units", color="room_name",
+                title="Wpłyv temperatury zewnętrznej na temperaturę wewnętrzną i zużycie [U]",
+                labels={"temp_zewnetrzna": "Temp. Zewnętrzna [°C]", "temp_wewnetrzna": "Temp. Wewnętrzna [°C]"}
             )
-            fig_heat.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=300)
+            fig_heat.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=320)
             st.plotly_chart(fig_heat, use_container_width=True)
     else:
         st.info("Brak danych analitycznych.")
