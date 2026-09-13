@@ -40,6 +40,7 @@ LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 
 # ---------------------------------------------------------
 # POBIERANIE POGODY I PROGNOZY Z OPENWEATHERMAP
 # ---------------------------------------------------------
+@st.cache_data(ttl=300, show_spinner=False)
 def get_outdoor_temp():
     api_key = "a10eb9dbf3db0ee12974f753113dd9c8"
     lat = 50.3168
@@ -53,9 +54,9 @@ def get_outdoor_temp():
         pass
     return 12.5
 
-@st.cache_data(ttl=1800, show_spinner=False)
+@st.cache_data(ttl=300, show_spinner=False)
 def get_weather_forecast():
-    api_key = "TUTAJ_WKLEJ_SWÓJ_KLUCZ_API"
+    api_key = "a10eb9dbf3db0ee12974f753113dd9c8"
     lat = 50.3168
     lon = 18.9839
     try:
