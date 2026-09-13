@@ -20,18 +20,18 @@ st.set_page_config(
 )
 
 FILE_PATH = "data/consumption.csv"
-APARTMENT_AREA_M2 = 66.54  # Dokładna powierzchnia lokalu
+APARTMENT_AREA_M2 = 66.54  # Dokładna powierzchnia lokalu[cite: 4]
 
-# Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m² (Wrzesień 2026)
-SSM_CO_MONTHLY_ADVANCE = 774.53  # Zaliczka miesięczna CO (11.64 zł / m²)
-SSM_NON_HEATING_RENT = 1121.87   # Opłaty stałe (eksploatacja, woda itp.)
-SSM_TOTAL_MONTHLY_RENT = 1896.40 # Całkowity miesięczny czynsz do SSM
+# Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m² (Wrzesień 2026)[cite: 4]
+SSM_CO_MONTHLY_ADVANCE = 774.53  # Zaliczka miesięczna CO (11.64 zł / m²)[cite: 4]
+SSM_NON_HEATING_RENT = 1121.87   # Opłaty stałe (eksploatacja, woda itp.)[cite: 4]
+SSM_TOTAL_MONTHLY_RENT = 1896.40 # Całkowity miesięczny czynsz do SSM[cite: 4]
 
-SSM_SEASON_MONTHS = 7            # Sezon grzewczy (październik - kwiecień / wrzesień start)
-SSM_TOTAL_WEEKS = 30             # Przybliżona liczba tygodni w sezonie
-SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity budżet zaliczkowy CO
+SSM_SEASON_MONTHS = 7            # Sezon grzewczy (październik - kwiecień / wrzesień start)[cite: 4]
+SSM_TOTAL_WEEKS = 30             # Przybliżona liczba tygodni w sezonie[cite: 4]
+SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity budżet zaliczkowy CO[cite: 4]
 
-# Precyzyjne współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego 3
+# Precyzyjne współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego 3[cite: 4]
 LAT_LOCATION = 50.3168
 LON_LOCATION = 18.9839
 LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 3)"
@@ -479,7 +479,7 @@ if "fancy_alert" in st.session_state:
     st.markdown(f"""
     <div class="fancy-alert-card">
         <h3 style="margin: 0 0 8px 0; color: #007AFF;">⚡ Sukces! Nowy odczyt zapisany dla strefy: {fa['room']}</h3>
-        <p style="margin: 4px 0; font-size: 16px;"><b>Przyrost w tym tygodniu ($\Delta U$):</b> <span style="color: #34C759; font-weight: 700;">+{fa['delta']:.1f} U</span> ({fa['delta']*EST_PLN_PER_UNIT:.2f} PLN)</p>
+        <p style="margin: 4px 0; font-size: 16px;"><b>Przyrost w tym tygodniu (&Delta;U):</b> <span style="color: #34C759; font-weight: 700;">+{fa['delta']:.1f} U</span> ({fa['delta']*EST_PLN_PER_UNIT:.2f} PLN)</p>
         <p style="margin: 4px 0; font-size: 16px;"><b>Porównanie tydzień do tygodnia:</b> <span style="color: {'#34C759' if fa['diff_vs_prev'] <= 0 else '#FF3B30'}; font-weight: 700;">{fa['diff_vs_prev']:+.1f}%</span> względem poprz. odczytu</p>
         <p style="margin: 4px 0; font-size: 16px;"><b>Całkowity bilans strefy w sezonie:</b> <b style="color: #AF52DE;">{fa['total_room_units']:.1f} U</b> (~{fa['total_room_units']*EST_PLN_PER_UNIT:.2f} PLN)</p>
         <p style="margin: 8px 0 0 0; font-size: 12px; color: #8E8E93;">Komunikat zniknie automatycznie po kilkuset sekundach.</p>
@@ -613,7 +613,7 @@ st.markdown(f"""
             <div class="val-num">{val_end:.1f} U</div>
         </div>
         <div class="val-box">
-            <div class="val-title">Ostatni Przyrost (ΔU)</div>
+            <div class="val-title">Ostatni Przyrost (&Delta;U)</div>
             <div class="val-num" style="color: #34C759;">+{last_delta:.1f} U</div>
         </div>
         <div class="val-box">
@@ -656,7 +656,7 @@ with kpi_col1:
 with kpi_col2:
     st.markdown(f"""
     <div class="val-box" style="padding: 16px;">
-        <div class="val-title">📐 Koszt na 1 m² Lokalu ({APARTMENT_AREA_M2} m²)</div>
+        <div class="val-title">📐 Koszt na 1 m² Lokalu ({APARTMENT_AREA_M2} m²)[cite: 4]</div>
         <div class="val-num" style="color: #007AFF; font-size: 24px;">{cost_per_m2_actual:.2f} zł / m²</div>
         <div style="font-size: 12px; color: #8E8E93; margin-top: 4px;">Zaliczka SSM: <b>{ssm_advance_per_m2_to_date:.2f} zł/m²</b> (Oszczędność: {ssm_advance_per_m2_to_date - cost_per_m2_actual:+.2f} zł)</div>
     </div>
@@ -768,7 +768,7 @@ with st.sidebar:
     <body style='font-family: Arial, sans-serif; padding: 20px; color: #333;'>
         <h2>Oficjalny Raport Rozliczeniowy Ciepła CO - SSM</h2>
         <p><b>Lokalizacja:</b> {LOCATION_NAME}</p>
-        <p><b>Powierzchnia lokalu:</b> {APARTMENT_AREA_M2} m²</p>
+        <p><b>Powierzchnia lokalu:</b> {APARTMENT_AREA_M2} m²</p>[cite: 4]
         <hr>
         <h3>Podsumowanie Finansowe</h3>
         <ul>
@@ -864,7 +864,7 @@ with tab_charts:
     if current_room == "Licznik Główny":
         st.markdown("#### Korelacja Zużycia Licznika Głównego (Suma Stref [U] oraz Energia [GJ])")
     else:
-        st.markdown(f"#### Korelacja Zużycia ΔU oraz Temperatury Zewnętrznej dla: **{current_room}**")
+        st.markdown(f"#### Korelacja Zużycia &Delta;U oraz Temperatury Zewnętrznej dla: **{current_room}**")
         
     if not df_room.empty:
         fig_dual = px_go.Figure()
@@ -1024,7 +1024,7 @@ with tab_analytics:
         if len(df_sonoff) >= 2 and "temp_wewnetrzna" in df_sonoff.columns:
             fig_heat = px.scatter(
                 df_sonoff, x="temp_zewnetrzna", y="temp_wewnetrzna", size="delta_units", color="room_name",
-                title="Wpłyv temperatury zewnętrznej na temperaturę wewnętrzną i zużycie [U]",
+                title="Wpływ temperatury zewnętrznej na temperaturę wewnętrzną i zużycie [U]",
                 labels={"temp_zewnetrzna": "Temp. Zewnętrzna [°C]", "temp_wewnetrzna": "Temp. Wewnętrzna [°C]"}
             )
             fig_heat.update_layout(template="plotly_white", paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', height=320)
