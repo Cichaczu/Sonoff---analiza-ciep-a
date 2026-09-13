@@ -1138,7 +1138,7 @@ with tab_ai_pred:
             mode="gauge+number+delta",
             value=total_realtime_cost,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text": "Zużycie Budżetu CO (PLN)", 'font': {'size': 16}},
+            title={'text': "Zużycie Budżetu CO (PLN)", 'font': {'size': 16}},
             delta={'reference': ssm_paid_advances_to_date, 'increasing': {'color': "red"}},
             gauge={
                 'axis': {'range': [None, SSM_ANNUAL_CO_BUDGET], 'tickwidth': 1, 'tickcolor': "darkblue"},
