@@ -20,18 +20,18 @@ st.set_page_config(
 )
 
 FILE_PATH = "data/consumption.csv"
-APARTMENT_AREA_M2 = 66.54  # Dokładna powierzchnia lokalu[cite: 4]
+APARTMENT_AREA_M2 = 66.54  # Dokładna powierzchnia lokalu
 
-# Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m² (Wrzesień 2026)[cite: 4]
-SSM_CO_MONTHLY_ADVANCE = 774.53  # Zaliczka miesięczna CO (11.64 zł / m²)[cite: 4]
-SSM_NON_HEATING_RENT = 1121.87   # Opłaty stałe (eksploatacja, woda itp.)[cite: 4]
-SSM_TOTAL_MONTHLY_RENT = 1896.40 # Całkowity miesięczny czynsz do SSM[cite: 4]
+# Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m² (Wrzesień 2026)
+SSM_CO_MONTHLY_ADVANCE = 774.53  # Zaliczka miesięczna CO (11.64 zł / m²)
+SSM_NON_HEATING_RENT = 1121.87   # Opłaty stałe (eksploatacja, woda itp.)
+SSM_TOTAL_MONTHLY_RENT = 1896.40 # Całkowity miesięczny czynsz do SSM
 
-SSM_SEASON_MONTHS = 7            # Sezon grzewczy (październik - kwiecień / wrzesień start)[cite: 4]
-SSM_TOTAL_WEEKS = 30             # Przybliżona liczba tygodni w sezonie[cite: 4]
-SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity budżet zaliczkowy CO[cite: 4]
+SSM_SEASON_MONTHS = 7            # Sezon grzewczy (październik - kwiecień / wrzesień start)
+SSM_TOTAL_WEEKS = 30             # Przybliżona liczba tygodni w sezonie
+SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity budżet zaliczkowy CO
 
-# Precyzyjne współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego 3[cite: 4]
+# Precyzyjne współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego 3
 LAT_LOCATION = 50.3168
 LON_LOCATION = 18.9839
 LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 3)"
@@ -656,7 +656,7 @@ with kpi_col1:
 with kpi_col2:
     st.markdown(f"""
     <div class="val-box" style="padding: 16px;">
-        <div class="val-title">📐 Koszt na 1 m² Lokalu ({APARTMENT_AREA_M2} m²)[cite: 4]</div>
+        <div class="val-title">📐 Koszt na 1 m² Lokalu ({APARTMENT_AREA_M2} m²)</div>
         <div class="val-num" style="color: #007AFF; font-size: 24px;">{cost_per_m2_actual:.2f} zł / m²</div>
         <div style="font-size: 12px; color: #8E8E93; margin-top: 4px;">Zaliczka SSM: <b>{ssm_advance_per_m2_to_date:.2f} zł/m²</b> (Oszczędność: {ssm_advance_per_m2_to_date - cost_per_m2_actual:+.2f} zł)</div>
     </div>
@@ -768,7 +768,7 @@ with st.sidebar:
     <body style='font-family: Arial, sans-serif; padding: 20px; color: #333;'>
         <h2>Oficjalny Raport Rozliczeniowy Ciepła CO - SSM</h2>
         <p><b>Lokalizacja:</b> {LOCATION_NAME}</p>
-        <p><b>Powierzchnia lokalu:</b> {APARTMENT_AREA_M2} m²</p>[cite: 4]
+        <p><b>Powierzchnia lokalu:</b> {APARTMENT_AREA_M2} m²</p>
         <hr>
         <h3>Podsumowanie Finansowe</h3>
         <ul>
@@ -850,12 +850,13 @@ with st.sidebar:
             st.rerun()
 
 # ---------------------------------------------------------
-# ZAKŁADKI ANALITYCZNE
+# ZAKŁADKI ANALITYCZNE (W TYM NOWA ZAKŁADKA HARMONOGRAMU)
 # ---------------------------------------------------------
-tab_charts, tab_season_comp, tab_analytics, tab_ai_pred, tab_history = st.tabs([
+tab_charts, tab_season_comp, tab_analytics, tab_schedule, tab_ai_pred, tab_history = st.tabs([
     "📈 Wykres, Skumulowany & Pogoda", 
     "📊 Porównanie Sezonów i Koszt Narastający",
-    "💸 Zyski i Straty & Heatmapa", 
+    "💸 Zyski i Straty & Heatmapa",
+    "📅 Harmonogram i Sterowanie",
     "🤖 Predykcja AI i Raport", 
     "📋 Historia i Edycja Wpisów"
 ])
@@ -1031,6 +1032,58 @@ with tab_analytics:
             st.plotly_chart(fig_heat, use_container_width=True)
     else:
         st.info("Brak danych analitycznych.")
+
+with tab_schedule:
+    st.markdown("### 📅 Harmonogram i Sterowanie Temperaturą (System Sonoff)")
+    st.caption("Konfiguracja czasowa głowic TRVZB oraz czujników optymalizująca zużycie energii w lokalu na 10. piętrze z nieizolowanym poddaszem.")
+
+    sch_col1, sch_col2 = st.columns(2)
+    with sch_col1:
+        st.markdown("""
+        <div class="ios-room-info-card" style="margin-bottom: 15px;">
+            <h4>🛋️ Salon</h4>
+            <ul style="margin: 0; padding-left: 20px; font-size: 15px; line-height: 1.6;">
+                <li><b>06:00 – 15:00:</b> <span style="color: #007AFF; font-weight: 600;">18,5°C</span> (okres obniżenia temperatury)[cite: 2]</li>
+                <li><b>15:00 – 22:30:</b> <span style="color: #34C759; font-weight: 600;">20,5°C</span> (strefa komfortu popołudniowo-wieczornego)[cite: 2]</li>
+                <li><b>22:30 – 06:00:</b> <span style="color: #AF52DE; font-weight: 600;">18,5°C</span> (nocne wygaszanie)[cite: 2]</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("""
+        <div class="ios-room-info-card">
+            <h4>🧒 Pokój dziecięcy</h4>
+            <ul style="margin: 0; padding-left: 20px; font-size: 15px; line-height: 1.6;">
+                <li><b>06:00 – 08:00:</b> <span style="color: #34C759; font-weight: 600;">21,0°C</span> (poranna aktywność)[cite: 2]</li>
+                <li><b>08:00 – 14:00:</b> <span style="color: #007AFF; font-weight: 600;">18,5°C</span> (okres nieobecności/wietrzenia)[cite: 2]</li>
+                <li><b>14:00 – 21:00:</b> <span style="color: #34C759; font-weight: 600;">21,0°C</span> (odpoczynek i nauka)[cite: 2]</li>
+                <li><b>21:00 – 06:00:</b> <span style="color: #AF52DE; font-weight: 600;">19,0°C</span> (stabilna temperatura nocna)[cite: 2]</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with sch_col2:
+        st.markdown("""
+        <div class="ios-room-info-card" style="margin-bottom: 15px;">
+            <h4>🛏️ Mały pokój</h4>
+            <ul style="margin: 0; padding-left: 20px; font-size: 15px; line-height: 1.6;">
+                <li><b>06:00 – 08:00:</b> <span style="color: #34C759; font-weight: 600;">20,5°C</span> (poranne okno komfortu)</li>
+                <li><b>08:00 – 15:00:</b> <span style="color: #007AFF; font-weight: 600;">18,5°C</span> (redukcja dzienna)</li>
+                <li><b>15:00 – 22:00:</b> <span style="color: #34C759; font-weight: 600;">20,5°C</span> (popołudniowe okno komfortu)</li>
+                <li><b>22:00 – 06:00:</b> <span style="color: #AF52DE; font-weight: 600;">18,5°C</span> (redukcja nocna)</li>
+            </ul>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("""
+        <div class="ios-room-info-card">
+            <h4>🏢 Przedpokój i łazienka</h4>
+            <ul style="margin: 0; padding-left: 20px; font-size: 15px; line-height: 1.6;">
+                <li><b>00:00 – 24:00 (Całodobowo):</b> <span style="color: #007AFF; font-weight: 600;">Poziom 4 (Stała baza)</span>[cite: 2]</li>
+            </ul>
+            <div style="font-size: 13px; color: #8E8E93; margin-top: 10px;">ℹ️ Utrzymanie stałej cyrkulacji zapobiega wychładzaniu stref komunikacyjnych i wspiera stabilizację mikroklimatu lokalu.</div>
+        </div>
+        """, unsafe_allow_html=True)
 
 with tab_ai_pred:
     st.markdown("### 🤖 Predykcja AI, Wykrywanie Anomalii & Prędkościomierz Budżetowy SSM")
