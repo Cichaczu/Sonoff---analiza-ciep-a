@@ -41,17 +41,25 @@ LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 
 # POBIERANIE POGODY I PROGNOZY Z OPENWEATHERMAP
 # ---------------------------------------------------------
 def get_outdoor_temp():
-    api_key = st.secrets.get("openweathermap", {}).get("api_key", None)
-    if not api_key:
-        return 12.5
+    # Wpisz swój klucz bezpośrednio tutaj w cudzysłowie:
+    api_key = "a10eb9dbf3db0ee12974f753113dd9c8" 
+    city = "Bytków" # lub Siemianowice Śląskie
+    
+    url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric"
+    
     try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?lat={LAT_LOCATION}&lon={LON_LOCATION}&appid={api_key}&units=metric"
-        res = requests.get(url, timeout=4)
-        if res.status_code == 200:
-            return float(res.json()['main']['temp'])
-    except requests.exceptions.RequestException:
-        pass
-    return 12.5
+        response = requests.get(url)
+        data = response.json()
+        
+        # Sprawdzenie czy zapytanie się powiodło (kod 200)
+        if response.status_code == 200:
+            return data["main"]["temp"]
+        else:
+            print(f"Błąd API: {data.get('message', 'Nieznany błąd')}")
+            return 12.5  # Awaryjna wartość w razie błędu
+    except Exception as e:
+        print(f"Błąd połączenia: {e}")
+        return 12.5
 
 @st.cache_data(ttl=1800, show_spinner=False)
 def get_weather_forecast():
