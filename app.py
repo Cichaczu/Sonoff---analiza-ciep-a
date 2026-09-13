@@ -46,7 +46,7 @@ def get_outdoor_temp():
         return 12.5
     try:
         url = f"https://api.openweathermap.org/data/2.5/weather?lat={LAT_LOCATION}&lon={LON_LOCATION}&appid={api_key}&units=metric"
-        res = requests.get(url, timeout=3)
+        res = requests.get(url, timeout=4)
         if res.status_code == 200:
             return float(res.json()['main']['temp'])
     except requests.exceptions.RequestException:
@@ -60,7 +60,7 @@ def get_weather_forecast():
         return []
     try:
         url = f"https://api.openweathermap.org/data/2.5/forecast?lat={LAT_LOCATION}&lon={LON_LOCATION}&appid={api_key}&units=metric"
-        res = requests.get(url, timeout=4)
+        res = requests.get(url, timeout=5)
         if res.status_code == 200:
             data = res.json()
             forecasts = []
@@ -68,7 +68,8 @@ def get_weather_forecast():
             for item in data.get('list', []):
                 dt_txt = item['dt_txt']
                 date_str = dt_txt.split(' ')[0]
-                if date_str not in seen_dates and "12:00:00" in dt_txt:
+                # Pobieramy wpis najbliższy południu lub pierwszy dostępny dla danego dnia
+                if date_str not in seen_dates and ("12:00:00" in dt_txt or len(seen_dates) == 0):
                     seen_dates.add(date_str)
                     forecasts.append({
                         "date": date_str,
