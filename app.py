@@ -21,18 +21,18 @@ st.set_page_config(
 
 FILE_PATH = "data/consumption.csv"
 EST_PLN_PER_UNIT = 2.45
-APARTMENT_AREA_M2 = 66.54  # Dokładna powierzchnia lokalu[cite: 2]
+APARTMENT_AREA_M2 = 66.54  # Dokładna powierzchnia lokalu
 
-# Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m² (Wrzesień 2026)[cite: 2]
-SSM_CO_MONTHLY_ADVANCE = 774.53  # Zaliczka miesięczna CO (11.64 zł / m²)[cite: 2]
-SSM_NON_HEATING_RENT = 1121.87   # Opłaty stałe (eksploatacja, woda itp.)[cite: 2]
-SSM_TOTAL_MONTHLY_RENT = 1896.40 # Całkowity miesięczny czynsz do SSM[cite: 2]
+# Oficjalne dane ze Spółdzielni (SSM) dla lokalu 66,54 m² (Wrzesień 2026)
+SSM_CO_MONTHLY_ADVANCE = 774.53  # Zaliczka miesięczna CO (11.64 zł / m²)
+SSM_NON_HEATING_RENT = 1121.87   # Opłaty stałe (eksploatacja, woda itp.)
+SSM_TOTAL_MONTHLY_RENT = 1896.40 # Całkowity miesięczny czynsz do SSM
 
-SSM_SEASON_MONTHS = 7            # Sezon grzewczy (październik - kwiecień / wrzesień start)[cite: 2]
-SSM_TOTAL_WEEKS = 30             # Przybliżona liczba tygodni w sezonie[cite: 2]
-SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity budżet zaliczkowy CO[cite: 2]
+SSM_SEASON_MONTHS = 7            # Sezon grzewczy (październik - kwiecień / wrzesień start)
+SSM_TOTAL_WEEKS = 30             # Przybliżona liczba tygodni w sezonie
+SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity budżet zaliczkowy CO
 
-# Precyzyjne współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego 3[cite: 2]
+# Precyzyjne współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego 3
 LAT_LOCATION = 50.3168
 LON_LOCATION = 18.9839
 LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 3)"
@@ -227,7 +227,7 @@ def create_initial_df():
             "delta_gj": 0.0,
             "temp_zewnetrzna": 14.2,
             "mode_tag": "Standard (Automatyczny)",
-            "notes": "Stan zero - wrzesień 2026[cite: 2]"
+            "notes": "Stan zero - wrzesień 2026"
         },
         {
             "id": 2,
@@ -245,7 +245,7 @@ def create_initial_df():
             "delta_gj": 0.0,
             "temp_zewnetrzna": 14.2,
             "mode_tag": "Standard (Automatyczny)",
-            "notes": "Stan zero - wrzesień 2026[cite: 2]"
+            "notes": "Stan zero - wrzesień 2026"
         },
         {
             "id": 3,
@@ -263,7 +263,7 @@ def create_initial_df():
             "delta_gj": 62.82,
             "temp_zewnetrzna": 6.5,
             "mode_tag": "Standard (Automatyczny)",
-            "notes": "Oficjalne dane zużycia 62.82 GJ[cite: 2]"
+            "notes": "Oficjalne dane zużycia 62.82 GJ"
         }
     ])
 
@@ -356,7 +356,7 @@ if "selected_room" not in st.session_state:
 current_room = st.session_state["selected_room"]
 
 st.title("🔥 Sonoff Smart Heating - Panel Sterowania & SSM Analytics")
-st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielnia Mieszkaniowa (SSM)[cite: 2]")
+st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielnia Mieszkaniowa (SSM)")
 
 # Wyświetlenie fancy powiadomienia, jeśli jest aktywne
 if "fancy_alert" in st.session_state:
@@ -444,7 +444,7 @@ if is_tuesday:
 
     if not already_added_this_week:
         with st.expander(f"🚨 WTOREK – Wymagany Odczyt dla strefy: {current_room} (Tydzień {current_iso_w})", expanded=True):
-            st.warning(f"Dziś jest wtorek! Podaj aktualny stan podzielnika dla strefy **{current_room}**, aby zsynchronizować aplikację[cite: 2].")
+            st.warning(f"Dziś jest wtorek! Podaj aktualny stan podzielnika dla strefy **{current_room}**, aby zsynchronizować aplikację.")
             
             with st.form("auto_tuesday_modal_form"):
                 m_input = st.text_input("Numer Podzielnika", value=last_meter)
@@ -581,7 +581,7 @@ with kpi_col1:
 with kpi_col2:
     st.markdown(f"""
     <div class="val-box" style="padding: 16px;">
-        <div class="val-title">📐 Koszt na 1 m² Lokalu ({APARTMENT_AREA_M2} m²)[cite: 2]</div>
+        <div class="val-title">📐 Koszt na 1 m² Lokalu ({APARTMENT_AREA_M2} m²)</div>
         <div class="val-num" style="color: #007AFF; font-size: 24px;">{cost_per_m2_actual:.2f} zł / m²</div>
         <div style="font-size: 12px; color: #8E8E93; margin-top: 4px;">Zaliczka SSM: <b>{ssm_advance_per_m2_to_date:.2f} zł/m²</b> (Oszczędność: {ssm_advance_per_m2_to_date - cost_per_m2_actual:+.2f} zł)</div>
     </div>
@@ -690,7 +690,7 @@ with st.sidebar:
     if forecast_list:
         min_forecast_temp = min([f['temp'] for f in forecast_list])
         if min_forecast_temp < 5.0:
-            st.warning(f"⚠️ **Ostrzeżenie o ochłodzeniu!** Prognozowana min. temperatura w Bytkowie spadnie do **{min_forecast_temp}°C**. Zalecane włączenie trybu komfortowego w harmonogramie Sonoff[cite: 2].")
+            st.warning(f"⚠️ **Ostrzeżenie o ochłodzeniu!** Prognozowana min. temperatura w Bytkowie spadnie do **{min_forecast_temp}°C**. Zalecane włączenie trybu komfortowego w harmonogramie Sonoff.")
         else:
             st.success("✅ Stabilne warunki pogodowe. Harmonogram ekologiczny Sonoff działa optymalnie.")
 
@@ -857,8 +857,8 @@ with tab_season_comp:
             st.plotly_chart(fig_cum, use_container_width=True)
 
         st.markdown("---")
-        st.markdown(f"#### 📐 Narastający Koszt Ogrzewania na 1 m² Lokalu ({APARTMENT_AREA_M2} m²) vs Średnia Stawka SSM[cite: 2]")
-        st.caption(f"Porównanie faktycznego kosztu CO w przeliczeniu na 1 m² względem limitu narastającego zaliczki spółdzielczej.")
+        st.markdown("#### 📐 Narastający Koszt Ogrzewania na 1 m² Lokalu vs Średnia Stawka SSM")
+        st.caption(f"Porównanie faktycznego kosztu CO w przeliczeniu na 1 m² ({APARTMENT_AREA_M2} m²) względem limitu narastającego zaliczki spółdzielczej.")
 
         df_m2_cum = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")].groupby("week_num")["delta_units"].sum().cumsum().reset_index()
         df_m2_cum["cost_per_m2"] = (df_m2_cum["delta_units"] * EST_PLN_PER_UNIT) / APARTMENT_AREA_M2
@@ -886,7 +886,7 @@ with tab_season_comp:
 
         st.markdown("---")
         st.markdown("#### 🏢 Struktura Opłat Całkowitych (Czynsz SSM vs Rzeczywisty Koszt CO)")
-        st.caption(f"Porównanie miesięczne opłat stałych (eksploatacja, woda, fundusz: **{SSM_NON_HEATING_RENT:.2f} PLN**), zaliczki na CO (**{SSM_CO_MONTHLY_ADVANCE:.2f} PLN**) oraz **rzeczywistego poboru ciepła Sonoff**[cite: 2].")
+        st.caption(f"Porównanie miesięczne opłat stałych (eksploatacja, woda, fundusz: **{SSM_NON_HEATING_RENT:.2f} PLN**), zaliczki na CO (**{SSM_CO_MONTHLY_ADVANCE:.2f} PLN**) oraz **rzeczywistego poboru ciepła Sonoff**.")
 
         weeks_in_data = sorted(df_sonoff_all["week_num"].unique()) if not df_sonoff_all.empty else [37]
         
@@ -1028,7 +1028,7 @@ with tab_ai_pred:
         if anomaly_detected:
             st.error(f"⚠️ **Alert Inteligentnego Wykrywania Anomalii:**\n\n{anomaly_msg}")
         else:
-            st.success("✅ **Stan Normalny (Brak Anomalii):**\n\nZużycie we wszystkich strefach jest stabilne i współgra z aktualną pogodą w Bytkowie[cite: 2].")
+            st.success("✅ **Stan Normalny (Brak Anomalii):**\n\nZużycie we wszystkich strefach jest stabilne i współgra z aktualną pogodą w Bytkowie.")
             
         st.info("💡 **Szczegółowy Raport Rozliczeniowy ze Spółdzielnią:**\n\n"
                 f"- Łączny budżet zaliczkowy CO na ten sezon wynosi **{SSM_ANNUAL_CO_BUDGET:.2f} PLN**.\n"
@@ -1041,7 +1041,7 @@ with tab_ai_pred:
             mode="gauge+number+delta",
             value=total_realtime_cost,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text": "Zużycie Budżetu CO (PLN)", 'font': {'size': 16}},
+            title={'text': "Zużycie Budżetu CO (PLN)", 'font': {'size': 16}},
             delta={'reference': ssm_paid_advances_to_date, 'increasing': {'color': "red"}},
             gauge={
                 'axis': {'range': [None, SSM_ANNUAL_CO_BUDGET], 'tickwidth': 1, 'tickcolor': "darkblue"},
