@@ -35,7 +35,7 @@ SSM_ANNUAL_CO_BUDGET = SSM_CO_MONTHLY_ADVANCE * SSM_SEASON_MONTHS  # Całkowity 
 # Precyzyjne współrzędne dla: Siemianowice Śląskie, Bytków, ul. Związku Harcerstwa Polskiego 3[cite: 2]
 LAT_LOCATION = 50.3168
 LON_LOCATION = 18.9839
-LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 3)"[cite: 2]
+LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 3)"
 
 # ---------------------------------------------------------
 # POBIERANIE POGODY I PROGNOZY Z OPENWEATHERMAP
