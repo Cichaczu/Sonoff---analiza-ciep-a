@@ -263,7 +263,7 @@ def create_initial_df():
             "delta_gj": 62.82,
             "temp_zewnetrzna": 6.5,
             "mode_tag": "Standard (Automatyczny)",
-            "notes": "Oficjalne dane zużycia 62.82 GJ"
+            "notes": "Oficjalne dane zużycia 62.82 GJ[cite: 2]"
         }
     ])
 
@@ -356,7 +356,7 @@ if "selected_room" not in st.session_state:
 current_room = st.session_state["selected_room"]
 
 st.title("🔥 Sonoff Smart Heating - Panel Sterowania & SSM Analytics")
-st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielnia Mieszkaniowa (SSM)")
+st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielnia Mieszkaniowa (SSM)[cite: 2]")
 
 # Wyświetlenie fancy powiadomienia, jeśli jest aktywne
 if "fancy_alert" in st.session_state:
@@ -444,7 +444,7 @@ if is_tuesday:
 
     if not already_added_this_week:
         with st.expander(f"🚨 WTOREK – Wymagany Odczyt dla strefy: {current_room} (Tydzień {current_iso_w})", expanded=True):
-            st.warning(f"Dziś jest wtorek! Podaj aktualny stan podzielnika dla strefy **{current_room}**, aby zsynchronizować aplikację.")
+            st.warning(f"Dziś jest wtorek! Podaj aktualny stan podzielnika dla strefy **{current_room}**, aby zsynchronizować aplikację[cite: 2].")
             
             with st.form("auto_tuesday_modal_form"):
                 m_input = st.text_input("Numer Podzielnika", value=last_meter)
@@ -684,13 +684,13 @@ with st.sidebar:
                     st.rerun()
 
     st.markdown("---")
-   st.header("🌤️ Prognoza 7D (Bytków) & Sonoff AI")
+    st.header("🌤️ Prognoza 7D (Bytków) & Sonoff AI")
     forecast_list = get_weather_forecast()
     
     if forecast_list:
         min_forecast_temp = min([f['temp'] for f in forecast_list])
         if min_forecast_temp < 5.0:
-            st.warning(f"⚠️ **Ostrzeżenie o ochłodzeniu!** Prognozowana min. temperatura w Bytkowie spadnie do **{min_forecast_temp}°C**. Zalecane włączenie trybu komfortowego w harmonogramie Sonoff.")[cite: 2]
+            st.warning(f"⚠️ **Ostrzeżenie o ochłodzeniu!** Prognozowana min. temperatura w Bytkowie spadnie do **{min_forecast_temp}°C**. Zalecane włączenie trybu komfortowego w harmonogramie Sonoff[cite: 2].")
         else:
             st.success("✅ Stabilne warunki pogodowe. Harmonogram ekologiczny Sonoff działa optymalnie.")
 
@@ -857,7 +857,7 @@ with tab_season_comp:
             st.plotly_chart(fig_cum, use_container_width=True)
 
         st.markdown("---")
-        st.markdown(f"#### 📐 Narastający Koszt Ogrzewania na 1 m² Lokalu ({APARTMENT_AREA_M2} m²) vs Średnia Stawka SSM")[cite: 2]
+        st.markdown(f"#### 📐 Narastający Koszt Ogrzewania na 1 m² Lokalu ({APARTMENT_AREA_M2} m²) vs Średnia Stawka SSM[cite: 2]")
         st.caption(f"Porównanie faktycznego kosztu CO w przeliczeniu na 1 m² względem limitu narastającego zaliczki spółdzielczej.")
 
         df_m2_cum = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")].groupby("week_num")["delta_units"].sum().cumsum().reset_index()
@@ -886,7 +886,7 @@ with tab_season_comp:
 
         st.markdown("---")
         st.markdown("#### 🏢 Struktura Opłat Całkowitych (Czynsz SSM vs Rzeczywisty Koszt CO)")
-        st.caption(f"Porównanie miesięczne opłat stałych (eksploatacja, woda, fundusz: **{SSM_NON_HEATING_RENT:.2f} PLN**), zaliczki na CO (**{SSM_CO_MONTHLY_ADVANCE:.2f} PLN**) oraz **rzeczywistego poboru ciepła Sonoff**.")[cite: 2]
+        st.caption(f"Porównanie miesięczne opłat stałych (eksploatacja, woda, fundusz: **{SSM_NON_HEATING_RENT:.2f} PLN**), zaliczki na CO (**{SSM_CO_MONTHLY_ADVANCE:.2f} PLN**) oraz **rzeczywistego poboru ciepła Sonoff**[cite: 2].")
 
         weeks_in_data = sorted(df_sonoff_all["week_num"].unique()) if not df_sonoff_all.empty else [37]
         
@@ -1028,7 +1028,7 @@ with tab_ai_pred:
         if anomaly_detected:
             st.error(f"⚠️ **Alert Inteligentnego Wykrywania Anomalii:**\n\n{anomaly_msg}")
         else:
-            st.success("✅ **Stan Normalny (Brak Anomalii):**\n\nZużycie we wszystkich strefach jest stabilne i współgra z aktualną pogodą w Bytkowie.")[cite: 2]
+            st.success("✅ **Stan Normalny (Brak Anomalii):**\n\nZużycie we wszystkich strefach jest stabilne i współgra z aktualną pogodą w Bytkowie[cite: 2].")
             
         st.info("💡 **Szczegółowy Raport Rozliczeniowy ze Spółdzielnią:**\n\n"
                 f"- Łączny budżet zaliczkowy CO na ten sezon wynosi **{SSM_ANNUAL_CO_BUDGET:.2f} PLN**.\n"
@@ -1041,7 +1041,7 @@ with tab_ai_pred:
             mode="gauge+number+delta",
             value=total_realtime_cost,
             domain={'x': [0, 1], 'y': [0, 1]},
-            title={'text': "Zużycie Budżetu CO (PLN)", 'font': {'size': 16}},
+            title={'text": "Zużycie Budżetu CO (PLN)", 'font': {'size': 16}},
             delta={'reference': ssm_paid_advances_to_date, 'increasing': {'color': "red"}},
             gauge={
                 'axis': {'range': [None, SSM_ANNUAL_CO_BUDGET], 'tickwidth': 1, 'tickcolor': "darkblue"},
