@@ -41,45 +41,46 @@ LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 
 # POBIERANIE POGODY I PROGNOZY Z OPENWEATHERMAP
 # ---------------------------------------------------------
 @st.cache_data(ttl=300, show_spinner=False)
-def load_data():
-    repo = get_github_repo()
-    branch = st.secrets.get("github", {}).get("branch", "main")
-    df = None
-    if repo:
-        try:
-            file_content = repo.get_contents(FILE_PATH, ref=branch)
-            df = pd.read_csv(io.StringIO(file_content.decoded_content.decode('utf-8')))
-        except Exception:
-            df = load_local_fallback()
-    else:
-        df = load_local_fallback()
-    
-    if df is not None and not df.empty:
-        required_columns = {
-            "id": 1,
-            "season": "2026/2027 (Sonoff - Wtorki)",
-            "week_num": 37,
-            "period_label": "Tydzień 37",
-            "date_entry": str(date.today()),
-            "room_name": "Sypialnia",
-            "meter_number": "11420",
-            "units_start": 0.0,
-            "units_end": 0.0,
-            "delta_units": 0.0,
-            "gj_start": 0.0,
-            "gj_end": 0.0,
-            "delta_gj": 0.0,
-            "temp_zewnetrzna": 12.0,
-            "mode_tag": "Standard (Automatyczny)",
-            "notes": ""
-        }
-        for col, default_val in required_columns.items():
-            if col not in df.columns:
-                df[col] = default_val
-    else:
-        df = create_initial_df()
-            
-    return df
+def get_outdoor_temp():
+    api_key = "a10eb9dbf3db0ee12974f753113dd9c8"
+    lat = 50.3168
+    lon = 18.9839
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+        res = requests.get(url, timeout=4)
+        if res.status_code == 200:
+            return float(res.json()['main']['temp'])
+    except Exception:
+        pass
+    return 12.5
+
+@st.cache_data(ttl=300, show_spinner=False)
+def get_weather_forecast():
+    api_key = "a10eb9dbf3db0ee12974f753113dd9c8"
+    lat = 50.3168
+    lon = 18.9839
+    try:
+        url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            forecasts = []
+            seen_dates = set()
+            for item in data.get('list', []):
+                dt_txt = item['dt_txt']
+                date_str = dt_txt.split(' ')[0]
+                if date_str not in seen_dates and ("12:00:00" in dt_txt or len(seen_dates) == 0):
+                    seen_dates.add(date_str)
+                    forecasts.append({
+                        "date": date_str,
+                        "temp": item['main']['temp'],
+                        "desc": item['weather'][0]['description'],
+                        "icon": item['weather'][0]['icon']
+                    })
+            return forecasts[:7]
+    except Exception:
+        pass
+    return []
 
 # ---------------------------------------------------------
 # STYLIZACJA W STYLU iOS 18 (Czysty, nowoczesny UI)
