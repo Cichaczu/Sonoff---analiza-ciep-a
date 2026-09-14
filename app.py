@@ -818,8 +818,53 @@ with tab_analytics:
     st.info("Moduł analityczny aktywny i zsynchronizowany.")
 
 with tab_schedule:
-    st.markdown("### 📅 Harmonogram i Sterowanie")
-    st.markdown("Zarządzanie głowicami TRVZB dla stref mieszkania.")
+    st.markdown("### 📅 Harmonogram i Sterowanie Głowicami TRVZB")
+    st.caption("Poniżej zaprezentowano aktywne harmonogramy czasowo-temperaturne dla poszczególnych stref grzewczych w mieszkaniu.")
+
+    sched_col1, sched_col2, sched_col3 = st.columns(3)
+
+    with sched_col1:
+        st.markdown("""
+        <div class="ios-room-info-card" style="padding: 18px !important;">
+            <div style="font-size: 18px; font-weight: 700; margin-bottom: 12px; color: #1C1C1E;">🛋️ Salon (Strefa dzienna)</div>
+            <div style="font-size: 13px; line-height: 1.6; color: #3A3A3C;">
+                <b>06:00 – 08:00</b> | <b>20.0°C</b><br>Poranny rozruch termiczny na krótki pobyt przed wyjściem do pracy.<br><br>
+                <b>08:00 – 14:00</b> | <b>18.0°C</b><br>Bezpieczna redukcja dzienna w pustym mieszkaniu.<br><br>
+                <b>14:00 – 15:00</b> | <b>19.5°C</b><br>Faza buforowa (pre-heating) przed popołudniowym powrotem.<br><br>
+                <b>15:00 – 22:30</b> | <b>21.5°C</b><br>Pełny komfort popołudniowo-wieczorny dla domowników.<br><br>
+                <b>22:30 – 06:00</b> | <b>19.0°C</b><br>Nocna stabilizacja temperaturowa.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with sched_col2:
+        st.markdown("""
+        <div class="ios-room-info-card" style="padding: 18px !important;">
+            <div style="font-size: 18px; font-weight: 700; margin-bottom: 12px; color: #1C1C1E;">🛏️ Sypialnia (z balkonem)</div>
+            <div style="font-size: 13px; line-height: 1.6; color: #3A3A3C;">
+                <b>06:00 – 07:30</b> | <b>19.5°C</b><br>Lekkie podbicie temperatury na poranne wstawanie.<br><br>
+                <b>07:30 – 20:00</b> | <b>18.0°C</b><br>Dniowa redukcja (sypialnia całkowicie nieużywana za dnia).<br><br>
+                <b>20:00 – 21:00</b> | <b>19.0°C</b><br>Wstępne wygrzanie przed snem i wieczornym wietrzeniem.<br><br>
+                <b>21:00 – 06:00</b> | <b>18.0°C</b><br>Chłodniejsza strefa nocna optymalna dla zdrowego snu.<br><br>
+                <hr style="margin: 8px 0; border-top: 1px solid rgba(0,0,0,0.1);">
+                <span style="font-size: 12px; color: #007AFF;"><b>Współczynnik balkonu:</b> Zawór trzyma sztywne minimum 18°C, eliminując ryzyko kondensacji na ościeżnicy przy wiatrach z Bytkowa.</span>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with sched_col3:
+        st.markdown("""
+        <div class="ios-room-info-card" style="padding: 18px !important;">
+            <div style="font-size: 18px; font-weight: 700; margin-bottom: 12px; color: #1C1C1E;">🧒 Pokój Dziecięcy</div>
+            <div style="font-size: 13px; line-height: 1.6; color: #3A3A3C;">
+                <b>05:30 – 07:20</b> | <b>21.0°C</b><br>Poranny rozruch na pobudkę od 06:00 i wyjście domowników.<br><br>
+                <b>07:20 – 14:00</b> | <b>18.0°C</b><br>Dzienna redukcja eco (bez głębszego wychładzania stropu).<br><br>
+                <b>14:00 – 15:00</b> | <b>19.5°C</b><br>Faza buforowa (pre-heating) przed powrotem dzieci o 15:00.<br><br>
+                <b>15:00 – 21:30</b> | <b>21.5°C</b><br>Popołudniowy i wieczorny komfort do godziny snu (21:30).<br><br>
+                <b>21:30 – 05:30</b> | <b>19.0°C</b><br>Stabilna temperatura nocna.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 with tab_ai_pred:
     st.markdown("### 🤖 Predykcja AI i Raport SSM")
