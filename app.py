@@ -51,7 +51,7 @@ def get_outdoor_temp():
             res = requests.get(url, timeout=4)
             if res.status_code == 200:
                 return float(res.json()['main']['temp'])
-        except Exception:
+        except Exception as e:
             pass
 
     try:
@@ -59,7 +59,7 @@ def get_outdoor_temp():
         res = requests.get(url_fallback, timeout=4)
         if res.status_code == 200:
             return float(res.json()['current']['temperature_2m'])
-    except Exception:
+    except Exception as e:
         pass
         
     return 12.5
@@ -90,7 +90,7 @@ def get_weather_forecast():
                             "icon": item['weather'][0]['icon']
                         })
                 return forecasts[:7]
-    except Exception:
+    except Exception as e:
         pass
         
     try:
@@ -111,7 +111,7 @@ def get_weather_forecast():
                     "icon": "01d"
                 })
             return forecasts
-    except Exception:
+    except Exception as e:
         pass
         
     return []
@@ -253,7 +253,7 @@ st.markdown("""
 # KONFIGURACJA POMIESZCZEŃ I GITHUB
 # ---------------------------------------------------------
 ROOMS_CONFIG = {
-    "Salon": {"icon": "🛋️", "meter_default": "POD-SAL-2026"},
+    "Salon": {"icon": "🛋️", "meter_default": "11420"},
     "Sypialnia": {"icon": "🛏️", "meter_default": "11420"},
     "Pokój Dziecka": {"icon": "🧒", "meter_default": "11420"},
     "Licznik Główny": {"icon": "🏢", "meter_default": "GJ-MAIN-2026"}
@@ -282,10 +282,10 @@ def create_initial_df():
             "period_label": "Tydzień 37 (Stan Zero)",
             "date_entry": "2026-09-08",
             "room_name": "Salon",
-            "meter_number": "POD-SAL-2026",
-            "units_start": 150.9,
-            "units_end": 150.9,
-            "delta_units": 0.0,
+            "meter_number": "11420",
+            "units_start": 364.0,
+            "units_end": 1509.0,
+            "delta_units": 1145.0,
             "gj_start": 0.0,
             "gj_end": 0.0,
             "delta_gj": 0.0,
@@ -375,10 +375,10 @@ def load_data():
             "period_label": "Tydzień 37",
             "date_entry": str(date.today()),
             "room_name": "Salon",
-            "meter_number": "POD-SAL-2026",
-            "units_start": 150.9,
-            "units_end": 150.9,
-            "delta_units": 0.0,
+            "meter_number": "11420",
+            "units_start": 364.0,
+            "units_end": 1509.0,
+            "delta_units": 1145.0,
             "gj_start": 0.0,
             "gj_end": 0.0,
             "delta_gj": 0.0,
@@ -407,6 +407,7 @@ def save_data(df, commit_message="Aktualizacja odczytu"):
     branch = st.secrets.get("github", {}).get("branch", "main")
     csv_string = df.to_csv(index=False)
     success = False
+    is_cloud_sync = False
     
     if repo:
         try:
@@ -417,16 +418,20 @@ def save_data(df, commit_message="Aktualizacja odczytu"):
                 if e.status == 404:
                     repo.create_file(FILE_PATH, commit_message, csv_string, branch=branch)
             success = True
+            is_cloud_sync = True
         except Exception:
             success = False
+            is_cloud_sync = False
             
-    if not success:
+    if not success or not repo:
         os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
         df.to_csv(FILE_PATH, index=False)
         success = True
         
     if success:
         st.cache_data.clear()
+        if not is_cloud_sync and repo:
+            st.warning("⚠️ Zapisano zmiany lokalnie (fallback). Synchronizacja z chmurą GitHub nie powiodła się z powodu błędu sieci/autoryzacji.")
         
     return success
 
@@ -490,8 +495,8 @@ if not df_room_sonoff.empty:
     total_delta_room = df_room_sonoff["delta_units"].sum()
 else:
     if current_room == "Salon":
-        val_start = 150.9
-        val_end = 150.9
+        val_start = 364.0
+        val_end = 1509.0
     elif current_room == "Pokój Dziecka":
         val_start = 150.9
         val_end = 150.9
@@ -505,7 +510,7 @@ else:
     last_date = "Brak odczytów"
     total_delta_room = val_end - val_start if current_room == "Salon" else 0.0
 
-last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty else 0.0
+last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty else (1145.0 if current_room == "Salon" else 0.0)
 live_outdoor_temp = get_outdoor_temp()
 
 if current_room == "Licznik Główny":
