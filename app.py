@@ -479,6 +479,9 @@ if "selected_room" not in st.session_state:
     st.session_state["selected_room"] = "Salon"
 
 current_room = st.session_state["selected_room"]
+if current_room not in ROOMS_CONFIG:
+    current_room = "Salon"
+    st.session_state["selected_room"] = current_room
 
 st.title("🔥 Sonoff Smart Heating - Panel Sterowania & SSM Analytics")
 st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielnia Mieszkaniowa (SSM)")
