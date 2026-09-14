@@ -51,7 +51,7 @@ def get_outdoor_temp():
             res = requests.get(url, timeout=4)
             if res.status_code == 200:
                 return float(res.json()['main']['temp'])
-        except Exception as e:
+        except Exception:
             pass
 
     try:
@@ -59,7 +59,7 @@ def get_outdoor_temp():
         res = requests.get(url_fallback, timeout=4)
         if res.status_code == 200:
             return float(res.json()['current']['temperature_2m'])
-    except Exception as e:
+    except Exception:
         pass
         
     return 12.5
@@ -90,7 +90,7 @@ def get_weather_forecast():
                             "icon": item['weather'][0]['icon']
                         })
                 return forecasts[:7]
-    except Exception as e:
+    except Exception:
         pass
         
     try:
@@ -111,7 +111,7 @@ def get_weather_forecast():
                     "icon": "01d"
                 })
             return forecasts
-    except Exception as e:
+    except Exception:
         pass
         
     return []
@@ -250,13 +250,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# KONFIGURACJA POMIESZCZEŃ I GITHUB
+# KONFIGURACJA POMIESZCZEŃ I GITHUB (ZAKTUALIZOWANE STANAMI POCZĄTKOWYMI)
 # ---------------------------------------------------------
 ROOMS_CONFIG = {
-    "Salon": {"icon": "🛋️", "meter_default": "11420"},
-    "Sypialnia": {"icon": "🛏️", "meter_default": "11420"},
-    "Pokój Dziecka": {"icon": "🧒", "meter_default": "11420"},
-    "Licznik Główny": {"icon": "🏢", "meter_default": "GJ-MAIN-2026"}
+    "Salon": {"icon": "🛋️", "device_id": "11420", "meter_default": "503 754 417", "units_start": 1509.0},
+    "Dzieciaki": {"icon": "🧒", "device_id": "11420", "meter_default": "503 754 240", "units_start": 1104.0},
+    "Sypialnia": {"icon": "🛏️", "device_id": "11420", "meter_default": "503 754 493", "units_start": 1267.0},
+    "Licznik Główny": {"icon": "🏢", "device_id": "-", "meter_default": "GJ-MAIN-2026", "units_start": 0.0}
 }
 
 SEASONS = ["2025/2026 (Bazowy)", "2026/2027 (Sonoff - Wtorki)"]
@@ -282,17 +282,17 @@ def create_initial_df():
             "period_label": "Tydzień 37 (Stan Zero)",
             "date_entry": "2026-09-08",
             "room_name": "Salon",
-            "meter_number": "11420",
-            "units_start": 364.0,
+            "meter_number": "503 754 417",
+            "units_start": 1509.0,
             "units_end": 1509.0,
-            "delta_units": 1145.0,
+            "delta_units": 0.0,
             "gj_start": 0.0,
             "gj_end": 0.0,
             "delta_gj": 0.0,
             "temp_zewnetrzna": 14.2,
             "temp_wewnetrzna": 20.5,
             "mode_tag": "Standard (Automatyczny)",
-            "notes": "Stan początkowy i aktualny - salon"
+            "notes": "Stan zero wrzesień 2026 - Salon"
         },
         {
             "id": 2,
@@ -300,10 +300,10 @@ def create_initial_df():
             "week_num": 37,
             "period_label": "Tydzień 37 (Stan Zero)",
             "date_entry": "2026-09-08",
-            "room_name": "Sypialnia",
-            "meter_number": "11420",
-            "units_start": 150.9,
-            "units_end": 150.9,
+            "room_name": "Dzieciaki",
+            "meter_number": "503 754 240",
+            "units_start": 1104.0,
+            "units_end": 1104.0,
             "delta_units": 0.0,
             "gj_start": 0.0,
             "gj_end": 0.0,
@@ -311,7 +311,7 @@ def create_initial_df():
             "temp_zewnetrzna": 14.2,
             "temp_wewnetrzna": 20.5,
             "mode_tag": "Standard (Automatyczny)",
-            "notes": "Stan zero - wrzesień 2026"
+            "notes": "Stan zero wrzesień 2026 - Dzieciaki"
         },
         {
             "id": 3,
@@ -319,10 +319,10 @@ def create_initial_df():
             "week_num": 37,
             "period_label": "Tydzień 37 (Stan Zero)",
             "date_entry": "2026-09-08",
-            "room_name": "Pokój Dziecka",
-            "meter_number": "11420",
-            "units_start": 150.9,
-            "units_end": 150.9,
+            "room_name": "Sypialnia",
+            "meter_number": "503 754 493",
+            "units_start": 1267.0,
+            "units_end": 1267.0,
             "delta_units": 0.0,
             "gj_start": 0.0,
             "gj_end": 0.0,
@@ -330,7 +330,7 @@ def create_initial_df():
             "temp_zewnetrzna": 14.2,
             "temp_wewnetrzna": 20.8,
             "mode_tag": "Standard (Automatyczny)",
-            "notes": "Stan zero - wrzesień 2026"
+            "notes": "Stan zero wrzesień 2026 - Sypialnia"
         },
         {
             "id": 4,
@@ -375,10 +375,10 @@ def load_data():
             "period_label": "Tydzień 37",
             "date_entry": str(date.today()),
             "room_name": "Salon",
-            "meter_number": "11420",
-            "units_start": 364.0,
+            "meter_number": "503 754 417",
+            "units_start": 1509.0,
             "units_end": 1509.0,
-            "delta_units": 1145.0,
+            "delta_units": 0.0,
             "gj_start": 0.0,
             "gj_end": 0.0,
             "delta_gj": 0.0,
@@ -494,23 +494,13 @@ if not df_room_sonoff.empty:
     last_date = str(last_row.get("date_entry", "Brak"))
     total_delta_room = df_room_sonoff["delta_units"].sum()
 else:
-    if current_room == "Salon":
-        val_start = 364.0
-        val_end = 1509.0
-    elif current_room == "Pokój Dziecka":
-        val_start = 150.9
-        val_end = 150.9
-    elif current_room == "Sypialnia":
-        val_start = 150.9
-        val_end = 150.9
-    else:
-        val_start = 0.0
-        val_end = 0.0
+    val_start = ROOMS_CONFIG[current_room]["units_start"]
+    val_end = val_start
     last_meter = ROOMS_CONFIG[current_room]["meter_default"]
     last_date = "Brak odczytów"
-    total_delta_room = val_end - val_start if current_room == "Salon" else 0.0
+    total_delta_room = 0.0
 
-last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty else (1145.0 if current_room == "Salon" else 0.0)
+last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty else 0.0
 live_outdoor_temp = get_outdoor_temp()
 
 if current_room == "Licznik Główny":
@@ -650,7 +640,7 @@ st.markdown(f"""
         <div>
             <div class="room-header">
                 {ROOMS_CONFIG[current_room]['icon']} Strefa: <b>{current_room}</b> 
-                <span class="meter-badge">{last_meter}</span>
+                <span class="meter-badge">Urządzenie: {ROOMS_CONFIG[current_room]['device_id']} | {last_meter}</span>
             </div>
             <div style="font-size: 13px; color: #8E8E93; margin-top: 2px;">ℹ️ {room_desc_subtitle}</div>
         </div>
