@@ -41,7 +41,6 @@ LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 
 # ---------------------------------------------------------
 @st.cache_data(ttl=300, show_spinner=False)
 def get_outdoor_temp():
-    # 1. Próba pobrania z OpenWeatherMap (z secrets lub session_state)
     api_key = st.secrets.get("openweathermap", {}).get("api_key", "")
     if not api_key and "custom_owm_key" in st.session_state:
         api_key = st.session_state["custom_owm_key"]
@@ -55,7 +54,6 @@ def get_outdoor_temp():
         except Exception:
             pass
 
-    # 2. Automatyczny fallback dynamiczny (Open-Meteo - bez klucza API, zawsze aktualne)
     try:
         url_fallback = f"https://api.open-meteo.com/v1/forecast?latitude={LAT_LOCATION}&longitude={LON_LOCATION}&current=temperature_2m"
         res = requests.get(url_fallback, timeout=4)
@@ -95,7 +93,6 @@ def get_weather_forecast():
     except Exception:
         pass
         
-    # Fallback prognozy przez Open-Meteo
     try:
         url_f_fallback = f"https://api.open-meteo.com/v1/forecast?latitude={LAT_LOCATION}&longitude={LON_LOCATION}&daily=temperature_2m_max,temperature_2m_min&timezone=auto"
         res = requests.get(url_f_fallback, timeout=5)
@@ -120,7 +117,7 @@ def get_weather_forecast():
     return []
 
 # ---------------------------------------------------------
-# STYLIZACJA W STYLU iOS 18 (Czysty, nowoczesny UI + Dynamic Island)
+# STYLIZACJA W STYLU iOS 18
 # ---------------------------------------------------------
 st.markdown("""
     <style>
@@ -256,7 +253,7 @@ st.markdown("""
 # KONFIGURACJA POMIESZCZEŃ I GITHUB
 # ---------------------------------------------------------
 ROOMS_CONFIG = {
-    "Salon": {"icon": "🛋️", "meter_default": "POD-SAL-2026"},
+    "Salon": {"icon": "🛋️", "meter_default": "11420 1509 / A364"},
     "Sypialnia": {"icon": "🛏️", "meter_default": "11420"},
     "Pokój Dziecka": {"icon": "🧒", "meter_default": "11420"},
     "Licznik Główny": {"icon": "🏢", "meter_default": "GJ-MAIN-2026"}
@@ -284,6 +281,25 @@ def create_initial_df():
             "week_num": 37,
             "period_label": "Tydzień 37 (Stan Zero)",
             "date_entry": "2026-09-08",
+            "room_name": "Salon",
+            "meter_number": "11420 1509 / A364",
+            "units_start": 0.0,
+            "units_end": 0.0,
+            "delta_units": 0.0,
+            "gj_start": 0.0,
+            "gj_end": 0.0,
+            "delta_gj": 0.0,
+            "temp_zewnetrzna": 14.2,
+            "temp_wewnetrzna": 20.5,
+            "mode_tag": "Standard (Automatyczny)",
+            "notes": "Stan zero - wrzesień 2026"
+        },
+        {
+            "id": 2,
+            "season": "2026/2027 (Sonoff - Wtorki)",
+            "week_num": 37,
+            "period_label": "Tydzień 37 (Stan Zero)",
+            "date_entry": "2026-09-08",
             "room_name": "Sypialnia",
             "meter_number": "11420",
             "units_start": 126.7,
@@ -298,7 +314,7 @@ def create_initial_df():
             "notes": "Stan zero - wrzesień 2026"
         },
         {
-            "id": 2,
+            "id": 3,
             "season": "2026/2027 (Sonoff - Wtorki)",
             "week_num": 37,
             "period_label": "Tydzień 37 (Stan Zero)",
@@ -317,7 +333,7 @@ def create_initial_df():
             "notes": "Stan zero - wrzesień 2026"
         },
         {
-            "id": 3,
+            "id": 4,
             "season": "2025/2026 (Bazowy)",
             "week_num": 37,
             "period_label": "Sezon Historyczny SSM",
@@ -358,8 +374,8 @@ def load_data():
             "week_num": 37,
             "period_label": "Tydzień 37",
             "date_entry": str(date.today()),
-            "room_name": "Sypialnia",
-            "meter_number": "11420",
+            "room_name": "Salon",
+            "meter_number": "11420 1509 / A364",
             "units_start": 0.0,
             "units_end": 0.0,
             "delta_units": 0.0,
@@ -455,7 +471,7 @@ with st.sidebar:
 
 # NAWIGACJA GŁÓWNA I NAGŁÓWEK
 if "selected_room" not in st.session_state:
-    st.session_state["selected_room"] = "Sypialnia"
+    st.session_state["selected_room"] = "Salon"
 
 current_room = st.session_state["selected_room"]
 
@@ -473,7 +489,14 @@ if not df_room_sonoff.empty:
     last_date = str(last_row.get("date_entry", "Brak"))
     total_delta_room = df_room_sonoff["delta_units"].sum()
 else:
-    val_start = 110.4 if current_room == "Pokój Dziecka" else (126.7 if current_room == "Sypialnia" else 0.0)
+    if current_room == "Salon":
+        val_start = 0.0
+    elif current_room == "Pokój Dziecka":
+        val_start = 110.4
+    elif current_room == "Sypialnia":
+        val_start = 126.7
+    else:
+        val_start = 0.0
     val_end = val_start
     last_meter = ROOMS_CONFIG[current_room]["meter_default"]
     last_date = "Brak odczytów"
@@ -540,7 +563,6 @@ cost_per_m2_actual = total_realtime_cost / APARTMENT_AREA_M2
 ssm_advance_per_m2_to_date = ssm_paid_advances_to_date / APARTMENT_AREA_M2
 room_share_pct = 100.0 if current_room == "Licznik Główny" else ((total_delta_room / total_apartment_units * 100) if total_apartment_units > 0 else 0.0)
 
-# WTOREK - MODAL
 if is_tuesday:
     current_year, current_iso_w, _ = today.isocalendar()
     already_added_this_week = False
@@ -686,7 +708,6 @@ with kpi_col3:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# PANEL BOCZNY - MODUŁY
 with st.sidebar:
     st.markdown("---")
     if selected_sidebar_section == "Ustawienia Symulacji":
@@ -708,7 +729,6 @@ with st.sidebar:
     elif selected_sidebar_section == "Prognoza 7D (Bytków) & Sonoff AI":
         st.subheader("🌤️ Prognoza 7D & Sonoff AI")
         
-        # Opcjonalne wpisanie klucza OWM w locie jeśli ktoś chce
         custom_key_input = st.text_input("Opcjonalny klucz OpenWeatherMap", value=st.session_state.get("custom_owm_key", ""), type="password")
         if custom_key_input:
             st.session_state["custom_owm_key"] = custom_key_input
@@ -759,7 +779,6 @@ with st.sidebar:
             st.warning("Usunięto ostatni wpis!")
             st.rerun()
 
-# GŁÓWNE ZAKŁADKI
 tab_charts, tab_season_comp, tab_analytics, tab_schedule, tab_ai_pred, tab_history = st.tabs([
     "📈 Wykres, Skumulowany & Pogoda", 
     "📊 Porównanie Sezonów i Koszt Narastający",
