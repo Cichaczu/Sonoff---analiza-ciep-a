@@ -37,15 +37,15 @@ LON_LOCATION = 18.9839
 LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 3)"
 
 # ---------------------------------------------------------
-# POBIERANIE POGODY I PROGNOZY Z OPENWEATHERMAP
+# POBIERANIE POGODY I PROGNOZY Z OPENWEATHERMAP (SEKRETY)
 # ---------------------------------------------------------
 @st.cache_data(ttl=300, show_spinner=False)
 def get_outdoor_temp():
-    api_key = "a10eb9dbf3db0ee12974f753113dd9c8"
-    lat = 50.3168
-    lon = 18.9839
     try:
-        url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+        api_key = st.secrets.get("openweathermap", {}).get("api_key", "")
+        if not api_key:
+            return 12.5
+        url = f"https://api.openweathermap.org/data/2.5/weather?lat={LAT_LOCATION}&lon={LON_LOCATION}&appid={api_key}&units=metric"
         res = requests.get(url, timeout=4)
         if res.status_code == 200:
             return float(res.json()['main']['temp'])
@@ -55,11 +55,11 @@ def get_outdoor_temp():
 
 @st.cache_data(ttl=300, show_spinner=False)
 def get_weather_forecast():
-    api_key = "a10eb9dbf3db0ee12974f753113dd9c8"
-    lat = 50.3168
-    lon = 18.9839
     try:
-        url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={api_key}&units=metric"
+        api_key = st.secrets.get("openweathermap", {}).get("api_key", "")
+        if not api_key:
+            return []
+        url = f"https://api.openweathermap.org/data/2.5/forecast?lat={LAT_LOCATION}&lon={LON_LOCATION}&appid={api_key}&units=metric"
         res = requests.get(url, timeout=5)
         if res.status_code == 200:
             data = res.json()
@@ -736,7 +736,7 @@ with st.sidebar:
             for f in forecast_list[:4]:
                 st.markdown(f"📅 **{f['date']}**: 🌡️ **{f['temp']:.1f}°C** | _{f['desc']}_")
         else:
-            st.info("Brak aktywnego klucza API OpenWeatherMap lub brak danych prognozy.")
+            st.info("Brak aktywnego klucza API OpenWeatherMap w secrets.toml lub brak danych prognozy.")
 
     elif selected_sidebar_section == "Symulator „Co jeśli?”":
         st.subheader("🎛️ Symulator „Co jeśli?”")
