@@ -302,8 +302,8 @@ def create_initial_df():
             "date_entry": "2026-09-08",
             "room_name": "Sypialnia",
             "meter_number": "11420",
-            "units_start": 126.7,
-            "units_end": 126.7,
+            "units_start": 150.9,
+            "units_end": 150.9,
             "delta_units": 0.0,
             "gj_start": 0.0,
             "gj_end": 0.0,
@@ -321,8 +321,8 @@ def create_initial_df():
             "date_entry": "2026-09-08",
             "room_name": "Pokój Dziecka",
             "meter_number": "11420",
-            "units_start": 110.4,
-            "units_end": 110.4,
+            "units_start": 150.9,
+            "units_end": 150.9,
             "delta_units": 0.0,
             "gj_start": 0.0,
             "gj_end": 0.0,
@@ -493,11 +493,11 @@ else:
         val_start = 364.0
         val_end = 1509.0
     elif current_room == "Pokój Dziecka":
-        val_start = 110.4
-        val_end = 110.4
+        val_start = 150.9
+        val_end = 150.9
     elif current_room == "Sypialnia":
-        val_start = 126.7
-        val_end = 126.7
+        val_start = 150.9
+        val_end = 150.9
     else:
         val_start = 0.0
         val_end = 0.0
