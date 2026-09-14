@@ -253,7 +253,7 @@ st.markdown("""
 # KONFIGURACJA POMIESZCZEŃ I GITHUB
 # ---------------------------------------------------------
 ROOMS_CONFIG = {
-    "Salon": {"icon": "🛋️", "meter_default": "11420"},
+    "Salon": {"icon": "🛋️", "meter_default": "POD-SAL-2026"},
     "Sypialnia": {"icon": "🛏️", "meter_default": "11420"},
     "Pokój Dziecka": {"icon": "🧒", "meter_default": "11420"},
     "Licznik Główny": {"icon": "🏢", "meter_default": "GJ-MAIN-2026"}
@@ -282,10 +282,10 @@ def create_initial_df():
             "period_label": "Tydzień 37 (Stan Zero)",
             "date_entry": "2026-09-08",
             "room_name": "Salon",
-            "meter_number": "11420",
-            "units_start": 364.0,
-            "units_end": 1509.0,
-            "delta_units": 1145.0,
+            "meter_number": "POD-SAL-2026",
+            "units_start": 150.9,
+            "units_end": 150.9,
+            "delta_units": 0.0,
             "gj_start": 0.0,
             "gj_end": 0.0,
             "delta_gj": 0.0,
@@ -375,10 +375,10 @@ def load_data():
             "period_label": "Tydzień 37",
             "date_entry": str(date.today()),
             "room_name": "Salon",
-            "meter_number": "11420",
-            "units_start": 364.0,
-            "units_end": 1509.0,
-            "delta_units": 1145.0,
+            "meter_number": "POD-SAL-2026",
+            "units_start": 150.9,
+            "units_end": 150.9,
+            "delta_units": 0.0,
             "gj_start": 0.0,
             "gj_end": 0.0,
             "delta_gj": 0.0,
@@ -490,8 +490,8 @@ if not df_room_sonoff.empty:
     total_delta_room = df_room_sonoff["delta_units"].sum()
 else:
     if current_room == "Salon":
-        val_start = 364.0
-        val_end = 1509.0
+        val_start = 150.9
+        val_end = 150.9
     elif current_room == "Pokój Dziecka":
         val_start = 150.9
         val_end = 150.9
@@ -505,7 +505,7 @@ else:
     last_date = "Brak odczytów"
     total_delta_room = val_end - val_start if current_room == "Salon" else 0.0
 
-last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty else (1145.0 if current_room == "Salon" else 0.0)
+last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty else 0.0
 live_outdoor_temp = get_outdoor_temp()
 
 if current_room == "Licznik Główny":
