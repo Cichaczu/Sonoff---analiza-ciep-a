@@ -11,7 +11,7 @@ import base64
 import streamlit.components.v1 as components
 
 # ---------------------------------------------------------
-# SETUP STRONY
+# SETUP STRONY & KUSTOMOWE STYLE CSS (KAFELKI + HOVER + WIDGETY)
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Sonoff - Analiza Ciepła",
@@ -19,6 +19,37 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Stylizacja CSS dla kart, efektu uniesienia (hover) oraz widgetów
+st.markdown("""
+    <style>
+    /* Efekt uniesienia i kafelki dla kart metryk i pojemników */
+    div[data-testid="stMetric"], .custom-card {
+        background: linear-gradient(135deg, #1e222d 0%, #252a38 100%);
+        border-radius: 12px;
+        padding: 18px;
+        border: 1px solid #363d52;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+        transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    }
+    
+    /* Efekt uniesienia po najechaniu myszką (Hover Effect) */
+    div[data-testid="stMetric"]:hover, .custom-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        border-color: #ff4b4b;
+    }
+
+    /* Widget strefy grzewczej */
+    .zone-widget {
+        background: #181b24;
+        border-left: 5px solid #ff4b4b;
+        padding: 15px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # KONFIGURACJA POMIESZCZEŃ I STAŁE
@@ -166,7 +197,7 @@ if view_mode == "🌀 Antigravity Mode":
     components.html(html_code, height=520)
 
 # ---------------------------------------------------------
-# WIDOK 2: PANEL GŁÓWNY (ZBIORCZY WTOREK + ANALITYKA)
+# WIDOK 2: PANEL GŁÓWNY (ZBIORCZY WTOREK + KAFELKI)
 # ---------------------------------------------------------
 elif view_mode == "📊 Panel Główny":
     st.title("🔥 Sonoff TRVZB – System Monitorowania Ciepła")
@@ -255,17 +286,25 @@ elif view_mode == "📊 Panel Główny":
                             st.success("Zapisano odczyty dla wszystkich pomieszczeń!")
                             st.rerun()
 
-    # METRYKI
+    # AKTYWNY WIDGET STREFY
     room_share_pct = ROOMS_CONFIG.get(current_room, {}).get("share", 1.0) * 100
-    room_desc_subtitle = "Suma wszystkich pokoi w mieszkaniu" if current_room == "Licznik Główny" else f"Pojedyncza strefa grzewcza ({room_share_pct:.1f}% udziału w mieszkaniu)"
-
-    st.caption(room_desc_subtitle)
+    room_icon = ROOMS_CONFIG.get(current_room, {}).get("icon", "🏠")
+    
+    st.markdown(f"""
+        <div class="zone-widget">
+            <h3 style="margin: 0; padding: 0;">{room_icon} Active Zone: <b>{current_room}</b></h3>
+            <p style="margin: 5px 0 0 0; color: #a0aab8;">
+                {'Suma wszystkich pomieszczeń w mieszkaniu' if current_room == 'Licznik Główny' else f'Pojedyncza strefa grzewcza ({room_share_pct:.1f}% udziału w mieszkaniu)'}
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
 
     if current_room == "Licznik Główny":
         df_filtered = df.copy()
     else:
         df_filtered = df[df["room_name"] == current_room] if not df.empty else pd.DataFrame()
 
+    # KAFELKI METRYK Z EFEKTEM HOVER
     m1, m2, m3, m4 = st.columns(4)
     total_units = df_filtered["delta_units"].sum() if not df_filtered.empty else 0.0
     avg_temp_in = df_filtered["temp_wewnetrzna"].mean() if not df_filtered.empty else 0.0
@@ -290,6 +329,7 @@ elif view_mode == "📊 Panel Główny":
             labels={"delta_units": "Zużycie [U]", "period_label": "Okres", "room_name": "Strefa"},
             barmode="group"
         )
+        fig.update_layout(template="plotly_dark", height=400)
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Brak danych do wyświetlenia wykresu. Dodaj pierwsze odczyty w zakładce Zarządzanie Danymi.")
