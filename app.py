@@ -8,8 +8,7 @@ import os
 from datetime import date, datetime, timedelta
 import requests
 import time
-import cv2
-import numpy as np
+from PIL import Image
 
 # ---------------------------------------------------------
 # KONFIGURACJA STRONY I LOKALIZACJI
@@ -39,23 +38,20 @@ LON_LOCATION = 18.9839
 LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 3)"
 
 # ---------------------------------------------------------
-# MODUŁ OCR (ROZPOZNAWANIE STANU LICZNIKA ZE ZDJĘCIA)
+# MODUŁ OCR (ROZPOZNAWANIE STANU LICZNIKA ZE ZDJĘCIA - PILLOW)
 # ---------------------------------------------------------
 def process_meter_ocr(image_file):
     """
-    Funkcja przetwarzająca obraz licznika za pomocą silnika wizyjnego / OCR.
-    Wyciąga z obrazu ciąg cyfr reprezentujący stan podzielnika.
+    Funkcja przetwarzająca obraz licznika za pomocą biblioteki Pillow (bez zewnętrznego OpenCV).
     """
     try:
         bytes_data = image_file.getvalue()
-        nparr = np.frombuffer(bytes_data, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        image = Image.open(io.BytesIO(bytes_data))
         
-        # Wstępna konwersja do skali szarości w celu poprawy detekcji kontrastu cyfr
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        # Konwersja do skali szarości w celu optymalizacji analizy kontrastu cyfr
+        gray_image = image.convert('L')
         
-        # Symulacja / bezpieczny parser odczytu wizyjnego (w środowisku produkcyjnym podpięcie pod API Vision)
-        # Zwraca status powodzenia, odczytaną wartość oraz komunikat
+        # Bezpieczny parser odczytu wizyjnego (symulacja / gotowość pod API Vision)
         return True, 1514.5, "Pomyślnie odczytano stan z OCR"
     except Exception as e:
         return False, 0.0, f"Błąd przetwarzania OCR: {str(e)}"
