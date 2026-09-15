@@ -250,13 +250,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# KONFIGURACJA POMIESZCZEŃ I GITHUB (ZAKTUALIZOWANE STANAMI POCZĄTKOWYMI)
+# KONFIGURACJA POMIESZCZEŃ I GITHUB
 # ---------------------------------------------------------
 ROOMS_CONFIG = {
-    "Salon": {"icon": "🛋️", "device_id": "11420", "meter_default": "503 754 417", "units_start": 1509.0},
-    "Dzieciaki": {"icon": "🧒", "device_id": "11420", "meter_default": "503 754 240", "units_start": 1104.0},
-    "Sypialnia": {"icon": "🛏️", "device_id": "11420", "meter_default": "503 754 493", "units_start": 1267.0},
-    "Licznik Główny": {"icon": "🏢", "device_id": "-", "meter_default": "GJ-MAIN-2026", "units_start": 0.0}
+    "Salon": {"icon": "🛋️", "device_id": "11420", "meter_default": "503 754 417", "units_start": 1509.0, "share": 0.45},
+    "Dzieciaki": {"icon": "🧒", "device_id": "11420", "meter_default": "503 754 240", "units_start": 1104.0, "share": 0.30},
+    "Sypialnia": {"icon": "🛏️", "device_id": "11420", "meter_default": "503 754 493", "units_start": 1267.0, "share": 0.25},
+    "Licznik Główny": {"icon": "🏢", "device_id": "-", "meter_default": "GJ-MAIN-2026", "units_start": 0.0, "share": 1.0}
 }
 
 SEASONS = ["2025/2026 (Bazowy)", "2026/2027 (Sonoff - Wtorki)"]
@@ -331,25 +331,6 @@ def create_initial_df():
             "temp_wewnetrzna": 20.8,
             "mode_tag": "Standard (Automatyczny)",
             "notes": "Stan zero wrzesień 2026 - Sypialnia"
-        },
-        {
-            "id": 4,
-            "season": "2025/2026 (Bazowy)",
-            "week_num": 37,
-            "period_label": "Sezon Historyczny SSM",
-            "date_entry": "2025-05-01",
-            "room_name": "Licznik Główny",
-            "meter_number": "GJ-MAIN-2025",
-            "units_start": 0.0,
-            "units_end": 2212.0,
-            "delta_units": 2212.0,
-            "gj_start": 0.0,
-            "gj_end": 62.82,
-            "delta_gj": 62.82,
-            "temp_zewnetrzna": 6.5,
-            "temp_wewnetrzna": 20.0,
-            "mode_tag": "Standard (Automatyczny)",
-            "notes": "Oficjalne dane zużycia 62.82 GJ"
         }
     ])
 
@@ -431,7 +412,7 @@ def save_data(df, commit_message="Aktualizacja odczytu"):
     if success:
         st.cache_data.clear()
         if not is_cloud_sync and repo:
-            st.warning("⚠️ Zapisano zmiany lokalnie (fallback). Synchronizacja z chmurą GitHub nie powiodła się z powodu błędu sieci/autoryzacji.")
+            st.warning("⚠️ Zapisano zmiany lokalnie (fallback). Synchronizacja z chmurą GitHub nie powiodła się.")
         
     return success
 
@@ -486,32 +467,34 @@ if current_room not in ROOMS_CONFIG:
 st.title("🔥 Sonoff Smart Heating - Panel Sterowania & SSM Analytics")
 st.caption(f"Lokalizacja: **{LOCATION_NAME}** | Pełna kontrola kosztów vs Spółdzielnia Mieszkaniowa (SSM)")
 
-df_room = df[df["room_name"] == current_room].sort_values(by=["date_entry", "id"]) if not df.empty else pd.DataFrame()
-df_room_sonoff = df_room[df_room["season"].str.contains("Sonoff", na=False)] if not df_room.empty else pd.DataFrame()
+# Przygotowanie danych dla wybranej strefy lub Licznika Głównego
+if current_room == "Licznik Główny":
+    df_filtered = df.copy()
+else:
+    df_filtered = df[df["room_name"] == current_room].sort_values(by=["date_entry", "id"]) if not df.empty else pd.DataFrame()
 
-if not df_room_sonoff.empty:
+df_room_sonoff = df_filtered[df_filtered["season"].str.contains("Sonoff", na=False)] if not df_filtered.empty else pd.DataFrame()
+
+if not df_room_sonoff.empty and current_room != "Licznik Główny":
     val_start = float(df_room_sonoff.iloc[0]["units_start"])
     last_row = df_room_sonoff.iloc[-1]
     val_end = float(last_row.get("units_end", val_start))
     last_meter = str(last_row.get("meter_number", ROOMS_CONFIG[current_room]["meter_default"]))
-    last_date = str(last_row.get("date_entry", "Brak"))
     total_delta_room = df_room_sonoff["delta_units"].sum()
-else:
-    val_start = ROOMS_CONFIG[current_room]["units_start"]
-    val_end = val_start
-    last_meter = ROOMS_CONFIG[current_room]["meter_default"]
-    last_date = "Brak odczytów"
-    total_delta_room = 0.0
-
-last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty else 0.0
-live_outdoor_temp = get_outdoor_temp()
-
-if current_room == "Licznik Główny":
+elif current_room == "Licznik Główny":
     df_sonoff_all_rooms = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")]
     total_delta_room = df_sonoff_all_rooms["delta_units"].sum() if not df_sonoff_all_rooms.empty else 0.0
     val_start = 0.0
     val_end = total_delta_room
     last_meter = "GJ-MAIN-SUMA"
+else:
+    val_start = ROOMS_CONFIG[current_room]["units_start"]
+    val_end = val_start
+    last_meter = ROOMS_CONFIG[current_room]["meter_default"]
+    total_delta_room = 0.0
+
+last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty and current_room != "Licznik Główny" else 0.0
+live_outdoor_temp = get_outdoor_temp()
 
 df_sonoff_all = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")] if not df.empty else pd.DataFrame()
 if df_sonoff_all.empty:
@@ -564,76 +547,72 @@ cost_per_m2_actual = total_realtime_cost / APARTMENT_AREA_M2
 ssm_advance_per_m2_to_date = ssm_paid_advances_to_date / APARTMENT_AREA_M2
 room_share_pct = 100.0 if current_room == "Licznik Główny" else ((total_delta_room / total_apartment_units * 100) if total_apartment_units > 0 else 0.0)
 
-if is_tuesday:
+# INDYWIDUALNY FORMULARZ WTORKOWY DLA AKTYWNEJ STREFSY (ZGODNIE Z ORYGINALNYM WYMAGANIEM)
+if is_tuesday and current_room != "Licznik Główny":
     current_year, current_iso_w, _ = today.isocalendar()
     already_added_this_week = False
-    if not df_room.empty:
-        already_added_this_week = ((df_room["week_num"] == current_iso_w) & (df_room["season"] == "2026/2027 (Sonoff - Wtorki)")).any()
+    if not df_room_sonoff.empty:
+        already_added_this_week = ((df_room_sonoff["week_num"] == current_iso_w) & (df_room_sonoff["season"] == "2026/2027 (Sonoff - Wtorki)")).any()
 
     if not already_added_this_week:
         with st.expander(f"🚨 WTOREK – Wymagany Odczyt dla strefy: {current_room} (Tydzień {current_iso_w})", expanded=True):
             st.warning(f"Dziś jest wtorek! Podaj aktualny stan podzielnika oraz temperaturę wewnętrzną dla strefy **{current_room}**.")
-            with st.form("auto_tuesday_modal_form"):
-                m_input = st.text_input("Numer Podzielnika", value=last_meter)
-                u_s = st.number_input("Stały Stan Początkowy Sezonu", min_value=0.0, value=val_start, disabled=True)
-                u_e = st.number_input("Wartość Końcowa (Z dzisiejszego wtorku)", min_value=0.0, value=max(val_end, val_start), step=0.1)
-                t_in_modal = st.number_input("Temperatura w pomieszczeniu [°C]", min_value=10.0, max_value=30.0, value=21.0, step=0.1)
-                m_tag = st.selectbox("Tryb pracy grzania", MODES, index=0)
-                
-                col_g1, col_g2 = st.columns(2)
-                with col_g1:
-                    gj_s_m = st.number_input("Licznik Główny Początek [GJ]", min_value=0.0, value=0.0, step=0.01)
-                with col_g2:
-                    gj_e_m = st.number_input("Licznik Główny Koniec [GJ]", min_value=0.0, value=0.0, step=0.01)
-                
-                modal_notes = st.text_input("Uwagi / Nastawa", value="Wtorkowa synchronizacja automatyczna")
+            
+            last_row_room = df_room_sonoff.iloc[-1] if not df_room_sonoff.empty else None
+            default_units_start = float(last_row_room["units_end"]) if last_row_room is not None else ROOMS_CONFIG[current_room]["units_start"]
+            default_meter = str(last_row_room["meter_number"]) if last_row_room is not None else ROOMS_CONFIG[current_room]["meter_default"]
 
-                if st.form_submit_button("⚡ Zapisz i zsynchronizuj aplikację", use_container_width=True):
-                    prev_val_end = val_end if not df_room_sonoff.empty else val_start
-                    delta_u_m = u_e - prev_val_end
-                    if delta_u_m < 0:
-                        delta_u_m = 0.0
-                        modal_notes = f"{modal_notes} [Auto-korekta: ujemna delta]"
-                    delta_g_m = gj_e_m - gj_s_m if gj_e_m > gj_s_m else 0.0
+            with st.form(f"auto_tuesday_form_{current_room}"):
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    meter_num = st.text_input("Nr podzielnika", value=default_meter)
+                with c2:
+                    units_start = st.number_input("Poprzedni stan [U]", value=default_units_start, disabled=True)
+                with c3:
+                    units_end = st.number_input("Nowy stan [U]", min_value=default_units_start, value=default_units_start, step=0.1)
 
-                    if u_e < prev_val_end:
-                        st.error("Wartość końcowa nie może być mniejsza od poprzedniego stanu licznika!")
-                    else:
-                        next_id = int(df["id"].max() + 1) if not df.empty and pd.notna(df["id"].max()) else 1
-                        new_row_modal = pd.DataFrame([{
-                            "id": next_id,
-                            "season": "2026/2027 (Sonoff - Wtorki)",
-                            "week_num": current_iso_w,
-                            "period_label": f"Tydzień {current_iso_w:02d} (Wtorek)",
-                            "date_entry": str(today),
-                            "room_name": current_room,
-                            "meter_number": m_input,
-                            "units_start": prev_val_end,
-                            "units_end": u_e,
-                            "delta_units": delta_u_m,
-                            "gj_start": gj_s_m,
-                            "gj_end": gj_e_m,
-                            "delta_gj": delta_g_m,
-                            "temp_zewnetrzna": live_outdoor_temp,
-                            "temp_wewnetrzna": t_in_modal,
-                            "mode_tag": m_tag,
-                            "notes": modal_notes
-                        }])
+                temp_in = st.number_input("Temp. wewnątrz [°C]", min_value=10.0, max_value=30.0, value=21.0, step=0.1)
+                mode_tag = st.selectbox("Tryb pracy grzania", MODES, index=0)
+                notes = st.text_input("Uwagi / Nastawa", value="Odczyt wtorkowy")
 
-                        df = pd.concat([df, new_row_modal], ignore_index=True)
-                        if save_data(df, commit_message=f"Automatyczny odczyt wtorkowy: {current_room} T{current_iso_w}"):
-                            prev_delta = last_delta if last_delta > 0 else 1.0
-                            diff_vs_prev = ((delta_u_m - prev_delta) / prev_delta * 100) if prev_delta > 0 else 0.0
-                            new_total_room = total_delta_room + delta_u_m
-                            st.session_state["fancy_alert"] = {
-                                "timestamp": time.time(),
-                                "room": current_room,
-                                "delta": delta_u_m,
-                                "diff_vs_prev": diff_vs_prev,
-                                "total_room_units": new_total_room
-                            }
-                            st.success("Zapisano pomyślnie! Synchronizuję aplikację...")
-                            st.rerun()
+                if st.form_submit_button("⚡ Zapisz odczyt wtorkowy", use_container_width=True):
+                    delta_u = units_end - units_start
+                    next_id = int(df["id"].max() + 1) if not df.empty and pd.notna(df["id"].max()) else 1
+                    
+                    new_row = {
+                        "id": next_id,
+                        "season": "2026/2027 (Sonoff - Wtorki)",
+                        "week_num": current_iso_w,
+                        "period_label": f"Tydzień {current_iso_w:02d} (Wtorek)",
+                        "date_entry": str(today),
+                        "room_name": current_room,
+                        "meter_number": meter_num,
+                        "units_start": units_start,
+                        "units_end": units_end,
+                        "delta_units": delta_u,
+                        "gj_start": 0.0,
+                        "gj_end": 0.0,
+                        "delta_gj": 0.0,
+                        "temp_zewnetrzna": live_outdoor_temp,
+                        "temp_wewnetrzna": temp_in,
+                        "mode_tag": mode_tag,
+                        "notes": notes
+                    }
+                    
+                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+                    if save_data(df, commit_message=f"Odczyt wtorkowy {current_room} T{current_iso_w}"):
+                        prev_delta = last_delta if last_delta > 0 else 1.0
+                        diff_vs_prev = ((delta_u - prev_delta) / prev_delta * 100) if prev_delta > 0 else 0.0
+                        new_total_room = total_delta_room + delta_u
+                        st.session_state["fancy_alert"] = {
+                            "timestamp": time.time(),
+                            "room": current_room,
+                            "delta": delta_u,
+                            "diff_vs_prev": diff_vs_prev,
+                            "total_room_units": new_total_room
+                        }
+                        st.success(f"Zapisano odczyt dla strefy {current_room}!")
+                        st.rerurn()
 
 room_desc_subtitle = "Suma wszystkich pokoi w mieszkaniu" if current_room == "Licznik Główny" else f"Pojedyncza strefa grzewcza ({room_share_pct:.1f}% udziału w mieszkaniu)"
 
@@ -791,10 +770,10 @@ tab_charts, tab_season_comp, tab_analytics, tab_schedule, tab_ai_pred, tab_histo
 
 with tab_charts:
     st.markdown(f"#### Korelacja Zużycia & Delta;U oraz Temperatury Zewnętrznej dla: **{current_room}**")
-    if not df_room.empty:
+    if not df_filtered.empty:
         fig_dual = px_go.Figure()
-        fig_dual.add_trace(px_go.Bar(x=df_room["period_label"], y=df_room["delta_units"], name="Zużycie [U]", marker_color="#007AFF"))
-        fig_dual.add_trace(px_go.Scatter(x=df_room["period_label"], y=df_room["temp_zewnetrzna"], name="Temp. Zewn. [°C]", mode="lines+markers", yaxis="y2", line=dict(color="#FF9500", width=3)))
+        fig_dual.add_trace(px_go.Bar(x=df_filtered["period_label"], y=df_filtered["delta_units"], name="Zużycie [U]", marker_color="#007AFF"))
+        fig_dual.add_trace(px_go.Scatter(x=df_filtered["period_label"], y=df_filtered["temp_zewnetrzna"], name="Temp. Zewn. [°C]", mode="lines+markers", yaxis="y2", line=dict(color="#FF9500", width=3)))
         fig_dual.update_layout(template="plotly_white", yaxis=dict(title="Zużycie [U]"), yaxis2=dict(title="Temperatura [°C]", overlaying="y", side="right"), height=360)
         st.plotly_chart(fig_dual, use_container_width=True)
 
@@ -828,11 +807,11 @@ with tab_schedule:
         <div class="ios-room-info-card" style="padding: 18px !important;">
             <div style="font-size: 18px; font-weight: 700; margin-bottom: 12px; color: #1C1C1E;">🛋️ Salon (Strefa dzienna)</div>
             <div style="font-size: 13px; line-height: 1.6; color: #3A3A3C;">
-                <b>06:00 – 08:00</b> | <b>20.0°C</b><br>Poranny rozruch termiczny na krótki pobyt przed wyjściem do pracy.<br><br>
-                <b>08:00 – 14:00</b> | <b>18.0°C</b><br>Bezpieczna redukcja dzienna w pustym mieszkaniu.<br><br>
-                <b>14:00 – 15:00</b> | <b>19.5°C</b><br>Faza buforowa (pre-heating) przed popołudniowym powrotem.<br><br>
-                <b>15:00 – 22:30</b> | <b>21.5°C</b><br>Pełny komfort popołudniowo-wieczorny dla domowników.<br><br>
-                <b>22:30 – 06:00</b> | <b>19.0°C</b><br>Nocna stabilizacja temperaturowa.
+                <b>06:00 – 08:00</b> | <b>20.0°C</b><br>Poranny rozruch termiczny.<br><br>
+                <b>08:00 – 14:00</b> | <b>18.0°C</b><br>Redukcja dzienna w pustym mieszkaniu.<br><br>
+                <b>14:00 – 15:00</b> | <b>19.5°C</b><br>Faza buforowa przed powrotem.<br><br>
+                <b>15:00 – 22:30</b> | <b>21.5°C</b><br>Komfort popołudniowo-wieczorny.<br><br>
+                <b>22:30 – 06:00</b> | <b>19.0°C</b><br>Nocna stabilizacja.
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -842,12 +821,12 @@ with tab_schedule:
         <div class="ios-room-info-card" style="padding: 18px !important;">
             <div style="font-size: 18px; font-weight: 700; margin-bottom: 12px; color: #1C1C1E;">🛏️ Sypialnia (z balkonem)</div>
             <div style="font-size: 13px; line-height: 1.6; color: #3A3A3C;">
-                <b>06:00 – 07:30</b> | <b>19.5°C</b><br>Lekkie podbicie temperatury na poranne wstawanie.<br><br>
-                <b>07:30 – 20:00</b> | <b>18.0°C</b><br>Dniowa redukcja (sypialnia całkowicie nieużywana za dnia).<br><br>
-                <b>20:00 – 21:00</b> | <b>19.0°C</b><br>Wstępne wygrzanie przed snem i wieczornym wietrzeniem.<br><br>
-                <b>21:00 – 06:00</b> | <b>18.0°C</b><br>Chłodniejsza strefa nocna optymalna dla zdrowego snu.<br><br>
+                <b>06:00 – 07:30</b> | <b>19.5°C</b><br>Poranne wstawanie.<br><br>
+                <b>07:30 – 20:00</b> | <b>18.0°C</b><br>Dniowa redukcja.<br><br>
+                <b>20:00 – 21:00</b> | <b>19.0°C</b><br>Wstępne wygrzanie przed snem.<br><br>
+                <b>21:00 – 06:00</b> | <b>18.0°C</b><br>Chłodniejsza strefa nocna.<br><br>
                 <hr style="margin: 8px 0; border-top: 1px solid rgba(0,0,0,0.1);">
-                <span style="font-size: 12px; color: #007AFF;"><b>Współczynnik balkonu:</b> Zawór trzyma sztywne minimum 18°C, eliminując ryzyko kondensacji na ościeżnicy przy wiatrach z Bytkowa.</span>
+                <span style="font-size: 12px; color: #007AFF;"><b>Współczynnik balkonu:</b> Zawór trzyma minimum 18°C.</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -857,10 +836,10 @@ with tab_schedule:
         <div class="ios-room-info-card" style="padding: 18px !important;">
             <div style="font-size: 18px; font-weight: 700; margin-bottom: 12px; color: #1C1C1E;">🧒 Pokój Dziecięcy</div>
             <div style="font-size: 13px; line-height: 1.6; color: #3A3A3C;">
-                <b>05:30 – 07:20</b> | <b>21.0°C</b><br>Poranny rozruch na pobudkę od 06:00 i wyjście domowników.<br><br>
-                <b>07:20 – 14:00</b> | <b>18.0°C</b><br>Dzienna redukcja eco (bez głębszego wychładzania stropu).<br><br>
-                <b>14:00 – 15:00</b> | <b>19.5°C</b><br>Faza buforowa (pre-heating) przed powrotem dzieci o 15:00.<br><br>
-                <b>15:00 – 21:30</b> | <b>21.5°C</b><br>Popołudniowy i wieczorny komfort do godziny snu (21:30).<br><br>
+                <b>05:30 – 07:20</b> | <b>21.0°C</b><br>Poranny rozruch.<br><br>
+                <b>07:20 – 14:00</b> | <b>18.0°C</b><br>Dzienna redukcja eco.<br><br>
+                <b>14:00 – 15:00</b> | <b>19.5°C</b><br>Faza buforowa przed powrotem.<br><br>
+                <b>15:00 – 21:30</b> | <b>21.5°C</b><br>Komfort popołudniowy.<br><br>
                 <b>21:30 – 05:30</b> | <b>19.0°C</b><br>Stabilna temperatura nocna.
             </div>
         </div>
