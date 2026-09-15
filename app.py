@@ -11,7 +11,7 @@ import base64
 import streamlit.components.v1 as components
 
 # ---------------------------------------------------------
-# SETUP STRONY & KUSTOMOWE STYLE CSS (KAFELKI + HOVER + WIDGETY)
+# SETUP STRONY
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Sonoff - Analiza Ciepła",
@@ -20,33 +20,24 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Stylizacja CSS dla kart, efektu uniesienia (hover) oraz widgetów
+# Kustomowa stylizacja CSS dla czytelności i wyglądu
 st.markdown("""
     <style>
-    /* Efekt uniesienia i kafelki dla kart metryk i pojemników */
-    div[data-testid="stMetric"], .custom-card {
+    .main {
+        background-color: #0e1117;
+    }
+    .stMetric {
+        background-color: #1e222d;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #2e364f;
+    }
+    .metric-card {
         background: linear-gradient(135deg, #1e222d 0%, #252a38 100%);
         border-radius: 12px;
-        padding: 18px;
+        padding: 20px;
         border: 1px solid #363d52;
-        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
-        transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
-    }
-    
-    /* Efekt uniesienia po najechaniu myszką (Hover Effect) */
-    div[data-testid="stMetric"]:hover, .custom-card:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
-        border-color: #ff4b4b;
-    }
-
-    /* Widget strefy grzewczej */
-    .zone-widget {
-        background: #181b24;
-        border-left: 5px solid #ff4b4b;
-        padding: 15px;
-        border-radius: 8px;
-        margin-bottom: 15px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
     }
     </style>
 """, unsafe_allow_html=True)
@@ -134,9 +125,11 @@ df = load_data()
 # ---------------------------------------------------------
 # SIDEBAR
 # ---------------------------------------------------------
+st.sidebar.image("https://img.icons8.com/fluency/96/thermostat.png", width=60)
 st.sidebar.title("Sonoff Heat Hub")
 
-view_mode = st.sidebar.radio("Widok", ["📊 Panel Główny", "🌀 Antigravity Mode", "⚙️ Zarządzanie Danymi"])
+# Przełącznik dla trybu Antigravity w Sidebarze
+antigravity_active = st.sidebar.checkbox("🌀 Antigravity Mode", value=False)
 
 st.sidebar.divider()
 current_room = st.sidebar.selectbox("Wybierz Strefę", ["Licznik Główny"] + list(ROOMS_CONFIG.keys()))
@@ -145,9 +138,9 @@ st.sidebar.divider()
 st.sidebar.metric("Pogoda (Bytków)", f"{live_outdoor_temp:.1f} °C", f"Wilgotność: {live_humidity}%")
 
 # ---------------------------------------------------------
-# WIDOK 1: ANTIGRAVITY MODE (MATTER.JS)
+# WIDOK FIZYCZNY (ANTIGRAVITY MODE - MATTER.JS)
 # ---------------------------------------------------------
-if view_mode == "🌀 Antigravity Mode":
+if antigravity_active:
     st.title("🌀 Interactive Physical Canvas (Matter.js)")
     st.caption("Fizyczna symulacja kafelków stref grzewczych.")
     
@@ -157,7 +150,7 @@ if view_mode == "🌀 Antigravity Mode":
     <head>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
         <style>
-            body { margin: 0; padding: 0; overflow: hidden; background-color: transparent; }
+            body { margin: 0; padding: 0; overflow: hidden; background-color: #0e1117; }
             canvas { width: 100%; height: 500px; display: block; }
         </style>
     </head>
@@ -168,7 +161,7 @@ if view_mode == "🌀 Antigravity Mode":
         const render = Render.create({
             element: document.body,
             engine: engine,
-            options: { width: 800, height: 500, wireframes: false, background: 'transparent' }
+            options: { width: 800, height: 500, wireframes: false, background: '#0e1117' }
         });
 
         const ground = Bodies.rectangle(400, 490, 800, 20, { isStatic: true, render: { fillStyle: '#2e364f' } });
@@ -197,9 +190,9 @@ if view_mode == "🌀 Antigravity Mode":
     components.html(html_code, height=520)
 
 # ---------------------------------------------------------
-# WIDOK 2: PANEL GŁÓWNY (ZBIORCZY WTOREK + KAFELKI)
+# PANEL GŁÓWNY (ANALIZA + ZBIORCZY WTOREK)
 # ---------------------------------------------------------
-elif view_mode == "📊 Panel Główny":
+else:
     st.title("🔥 Sonoff TRVZB – System Monitorowania Ciepła")
     
     # SPRAWDŹ CZY DZIŚ JEST WTOREK
@@ -286,25 +279,19 @@ elif view_mode == "📊 Panel Główny":
                             st.success("Zapisano odczyty dla wszystkich pomieszczeń!")
                             st.rerun()
 
-    # AKTYWNY WIDGET STREFY
+    # PODTYTUŁ STREFY
     room_share_pct = ROOMS_CONFIG.get(current_room, {}).get("share", 1.0) * 100
-    room_icon = ROOMS_CONFIG.get(current_room, {}).get("icon", "🏠")
-    
-    st.markdown(f"""
-        <div class="zone-widget">
-            <h3 style="margin: 0; padding: 0;">{room_icon} Active Zone: <b>{current_room}</b></h3>
-            <p style="margin: 5px 0 0 0; color: #a0aab8;">
-                {'Suma wszystkich pomieszczeń w mieszkaniu' if current_room == 'Licznik Główny' else f'Pojedyncza strefa grzewcza ({room_share_pct:.1f}% udziału w mieszkaniu)'}
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
+    room_desc_subtitle = "Suma wszystkich pokoi w mieszkaniu" if current_room == "Licznik Główny" else f"Pojedyncza strefa grzewcza ({room_share_pct:.1f}% udziału w mieszkaniu)"
 
+    st.caption(room_desc_subtitle)
+
+    # FILTROWANIE DANYCH
     if current_room == "Licznik Główny":
         df_filtered = df.copy()
     else:
         df_filtered = df[df["room_name"] == current_room] if not df.empty else pd.DataFrame()
 
-    # KAFELKI METRYK Z EFEKTEM HOVER
+    # METRYKI
     m1, m2, m3, m4 = st.columns(4)
     total_units = df_filtered["delta_units"].sum() if not df_filtered.empty else 0.0
     avg_temp_in = df_filtered["temp_wewnetrzna"].mean() if not df_filtered.empty else 0.0
@@ -332,14 +319,4 @@ elif view_mode == "📊 Panel Główny":
         fig.update_layout(template="plotly_dark", height=400)
         st.plotly_chart(fig, use_container_width=True)
     else:
-        st.info("Brak danych do wyświetlenia wykresu. Dodaj pierwsze odczyty w zakładce Zarządzanie Danymi.")
-
-# ---------------------------------------------------------
-# WIDOK 3: ZARZĄDZANIE DANYMI
-# ---------------------------------------------------------
-elif view_mode == "⚙️ Zarządzanie Danymi":
-    st.title("⚙️ Zarządzanie Baza Danych")
-    st.dataframe(df, use_container_width=True)
-    
-    if st.button("🔄 Odśwież dane z serwera"):
-        st.rerun()
+        st.info("Brak danych do wyświetlenia wykresu. Dodaj pierwsze odczyty w bazie danych.")
