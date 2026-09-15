@@ -5,3 +5,5 @@ PyGithub
 requests
 scikit-learn
 reportlab
+opencv-python-headless
+numpy
