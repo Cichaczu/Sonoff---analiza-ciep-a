@@ -40,21 +40,34 @@ LOCATION_NAME = "Siemianowice Śl. - Bytków (ul. Związku Harcerstwa Polskiego 
 # ---------------------------------------------------------
 # MODUŁ OCR (ROZPOZNAWANIE STANU LICZNIKA ZE ZDJĘCIA - PILLOW)
 # ---------------------------------------------------------
-def process_meter_ocr(image_file):
+def process_meter_ocr(image_file, fallback_value):
     """
-    Funkcja przetwarzająca obraz licznika za pomocą biblioteki Pillow (bez zewnętrznego OpenCV).
+    UWAGA: To jest tylko SZKIELET pod przyszłą integrację z prawdziwym silnikiem
+    OCR / Vision API. Obecnie NIE odczytuje realnej wartości z obrazu - Pillow
+    jest tu użyte wyłącznie do walidacji, że plik to poprawny obraz (dekodowanie
+    + konwersja do skali szarości). Zwracamy `fallback_value` (czyli ostatni
+    znany stan licznika danej strefy), żeby formularz miał sensowny punkt
+    startowy do ręcznej korekty przez użytkownika, zamiast podstawiać stałą,
+    nierealną liczbę (np. 1514.5) niezależną od wybranej strefy.
+
+    Gdy podłączysz prawdziwe API (np. Google Vision / Tesseract), podmień
+    blok poniżej na faktyczne rozpoznawanie cyfr z obrazu.
     """
     try:
         bytes_data = image_file.getvalue()
         image = Image.open(io.BytesIO(bytes_data))
-        
+
         # Konwersja do skali szarości w celu optymalizacji analizy kontrastu cyfr
         gray_image = image.convert('L')
-        
-        # Bezpieczny parser odczytu wizyjnego (symulacja / gotowość pod API Vision)
-        return True, 1514.5, "Pomyślnie odczytano stan z OCR"
+        _ = gray_image.size  # walidacja, że obraz został poprawnie zdekodowany
+
+        # Brak realnego silnika OCR - zwracamy fallback i jasno o tym informujemy
+        return False, float(fallback_value), (
+            "Obraz wczytany poprawnie, ale automatyczne rozpoznawanie cyfr nie jest "
+            "jeszcze podłączone - wpisz stan licznika ręcznie."
+        )
     except Exception as e:
-        return False, 0.0, f"Błąd przetwarzania OCR: {str(e)}"
+        return False, float(fallback_value), f"Błąd przetwarzania obrazu: {str(e)}"
 
 # ---------------------------------------------------------
 # DYNAMICZNE POBIERANIE POGODY (OPENWEATHERMAP / OPEN-METEO FALLBACK)
@@ -64,7 +77,7 @@ def get_outdoor_temp():
     api_key = st.secrets.get("openweathermap", {}).get("api_key", "")
     if not api_key and "custom_owm_key" in st.session_state:
         api_key = st.session_state["custom_owm_key"]
-        
+
     if api_key:
         try:
             url = f"https://api.openweathermap.org/data/2.5/weather?lat={LAT_LOCATION}&lon={LON_LOCATION}&appid={api_key}&units=metric"
@@ -81,7 +94,7 @@ def get_outdoor_temp():
             return float(res.json()['current']['temperature_2m'])
     except Exception:
         pass
-        
+
     return 12.5
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -96,23 +109,30 @@ def get_weather_forecast():
             res = requests.get(url, timeout=5)
             if res.status_code == 200:
                 data = res.json()
-                forecasts = []
-                seen_dates = set()
+                # Naprawiono: dla każdego dnia zawsze preferujemy odczyt z godz. 12:00,
+                # niezależnie od tego, który rekord API przyszedł jako pierwszy.
+                forecasts_by_date = {}
                 for item in data.get('list', []):
                     dt_txt = item['dt_txt']
                     date_str = dt_txt.split(' ')[0]
-                    if date_str not in seen_dates and ("12:00:00" in dt_txt or len(seen_dates) == 0):
-                        seen_dates.add(date_str)
-                        forecasts.append({
+                    is_noon = "12:00:00" in dt_txt
+                    if date_str not in forecasts_by_date or is_noon:
+                        forecasts_by_date[date_str] = {
                             "date": date_str,
                             "temp": item['main']['temp'],
                             "desc": item['weather'][0]['description'],
-                            "icon": item['weather'][0]['icon']
-                        })
+                            "icon": item['weather'][0]['icon'],
+                            "_is_noon": is_noon
+                        }
+                ordered_dates = sorted(forecasts_by_date.keys())
+                forecasts = [
+                    {k: v for k, v in forecasts_by_date[d].items() if k != "_is_noon"}
+                    for d in ordered_dates
+                ]
                 return forecasts[:7]
     except Exception:
         pass
-        
+
     try:
         url_f_fallback = f"https://api.open-meteo.com/v1/forecast?latitude={LAT_LOCATION}&longitude={LON_LOCATION}&daily=temperature_2m_max,temperature_2m_min&timezone=auto"
         res = requests.get(url_f_fallback, timeout=5)
@@ -133,7 +153,7 @@ def get_weather_forecast():
             return forecasts
     except Exception:
         pass
-        
+
     return []
 
 # ---------------------------------------------------------
@@ -142,13 +162,13 @@ def get_weather_forecast():
 st.markdown("""
     <style>
     @import url('https://fonts.cdnfonts.com/css/sf-pro-display');
-    
+
     html, body, [class*="css"] {
         font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif !important;
         color: #1C1C1E !important;
     }
-    .main { 
-        background: linear-gradient(180deg, #F2F2F7 0%, #E5E5EA 100%) !important; 
+    .main {
+        background: linear-gradient(180deg, #F2F2F7 0%, #E5E5EA 100%) !important;
     }
 
     .ios-dynamic-island {
@@ -203,7 +223,7 @@ st.markdown("""
         color: #1C1C1E;
         letter-spacing: -0.4px;
     }
-    
+
     .ios-live-badge {
         background: rgba(255, 255, 255, 0.9);
         border: 1px solid rgba(0, 122, 255, 0.2);
@@ -252,7 +272,7 @@ st.markdown("""
         color: #007AFF;
         margin-top: 3px;
     }
-    
+
     .fancy-alert-card {
         background: linear-gradient(135deg, rgba(0, 122, 255, 0.1) 0%, rgba(52, 199, 89, 0.1) 100%);
         border: 2px solid #007AFF;
@@ -273,11 +293,15 @@ st.markdown("""
 # KONFIGURACJA POMIESZCZEŃ I GITHUB
 # ---------------------------------------------------------
 ROOMS_CONFIG = {
-    "Salon": {"icon": "🛋️", "device_id": "11420", "meter_default": "503 754 417", "units_start": 1509.0, "share": 0.45},
-    "Dzieciaki": {"icon": "🧒", "device_id": "11420", "meter_default": "503 754 240", "units_start": 1104.0, "share": 0.30},
-    "Sypialnia": {"icon": "🛏️", "device_id": "11420", "meter_default": "503 754 493", "units_start": 1267.0, "share": 0.25},
-    "Licznik Główny": {"icon": "🏢", "device_id": "-", "meter_default": "GJ-MAIN-2026", "units_start": 0.0, "share": 1.0}
+    "Salon": {"icon": "🛋️", "device_id": "11420", "meter_default": "503 754 417", "units_start": 1509.0},
+    "Dzieciaki": {"icon": "🧒", "device_id": "11420", "meter_default": "503 754 240", "units_start": 1104.0},
+    "Sypialnia": {"icon": "🛏️", "device_id": "11420", "meter_default": "503 754 493", "units_start": 1267.0},
+    "Licznik Główny": {"icon": "🏢", "device_id": "-", "meter_default": "GJ-MAIN-2026", "units_start": 0.0}
 }
+# Uwaga: usunięto nieużywany klucz "share" (0.45/0.30/0.25) - realny udział
+# procentowy każdej strefy jest liczony dynamicznie z rzeczywistych danych
+# (patrz zmienna `room_share_pct`), więc statyczne wartości były martwym
+# kodem mogącym wprowadzać w błąd przy edycji configu.
 
 SEASONS = ["2025/2026 (Bazowy)", "2026/2027 (Sonoff - Wtorki)"]
 MODES = ["Standard (Automatyczny)", "Eco / Redukcja niska", "Nieobecność domowników", "Intensywne grzanie"]
@@ -367,7 +391,7 @@ def load_data():
             df = load_local_fallback()
     else:
         df = load_local_fallback()
-    
+
     if df is not None and not df.empty:
         required_columns = {
             "id": 1,
@@ -391,7 +415,13 @@ def load_data():
         for col, default_val in required_columns.items():
             if col not in df.columns:
                 df[col] = default_val
-            
+
+        # Normalizacja typów - zapewnia poprawne sortowanie chronologiczne
+        # (istotne dla wykresu skumulowanego w zakładce "Porównanie Sezonów")
+        df["date_entry"] = pd.to_datetime(df["date_entry"], errors="coerce").dt.strftime("%Y-%m-%d")
+        df["week_num"] = pd.to_numeric(df["week_num"], errors="coerce").fillna(0).astype(int)
+        df["delta_units"] = pd.to_numeric(df["delta_units"], errors="coerce").fillna(0.0)
+
     return df
 
 def load_local_fallback():
@@ -409,7 +439,7 @@ def save_data(df, commit_message="Aktualizacja odczytu"):
     csv_string = df.to_csv(index=False)
     success = False
     is_cloud_sync = False
-    
+
     if repo:
         try:
             try:
@@ -423,17 +453,17 @@ def save_data(df, commit_message="Aktualizacja odczytu"):
         except Exception:
             success = False
             is_cloud_sync = False
-            
+
     if not success or not repo:
         os.makedirs(os.path.dirname(FILE_PATH), exist_ok=True)
         df.to_csv(FILE_PATH, index=False)
         success = True
-        
+
     if success:
         st.cache_data.clear()
         if not is_cloud_sync and repo:
             st.warning("⚠️ Zapisano zmiany lokalnie (fallback). Synchronizacja z chmurą GitHub nie powiodła się.")
-        
+
     return success
 
 df = load_data()
@@ -494,6 +524,8 @@ else:
     df_filtered = df[df["room_name"] == current_room].sort_values(by=["date_entry", "id"]) if not df.empty else pd.DataFrame()
 
 df_room_sonoff = df_filtered[df_filtered["season"].str.contains("Sonoff", na=False)] if not df_filtered.empty else pd.DataFrame()
+if not df_room_sonoff.empty:
+    df_room_sonoff = df_room_sonoff.sort_values(by=["date_entry", "id"])
 
 if not df_room_sonoff.empty and current_room != "Licznik Główny":
     val_start = float(df_room_sonoff.iloc[0]["units_start"])
@@ -513,7 +545,22 @@ else:
     last_meter = ROOMS_CONFIG[current_room]["meter_default"]
     total_delta_room = 0.0
 
-last_delta = df_room_sonoff.iloc[-1]["delta_units"] if not df_room_sonoff.empty and current_room != "Licznik Główny" else 0.0
+# NAPRAWIONO: dla widoku "Licznik Główny" ostatni przyrost to suma ostatnich
+# przyrostów każdej pojedynczej strefy, a nie sztywne 0.0.
+if current_room == "Licznik Główny":
+    last_delta = 0.0
+    for room_name in ROOMS_CONFIG:
+        if room_name == "Licznik Główny":
+            continue
+        room_df = df[(df["room_name"] == room_name) & (df["season"].str.contains("Sonoff", na=False))]
+        if not room_df.empty:
+            room_df = room_df.sort_values(by=["date_entry", "id"])
+            last_delta += float(room_df.iloc[-1]["delta_units"])
+elif not df_room_sonoff.empty:
+    last_delta = float(df_room_sonoff.iloc[-1]["delta_units"])
+else:
+    last_delta = 0.0
+
 live_outdoor_temp = get_outdoor_temp()
 
 df_sonoff_all = df[df["season"].str.contains("Sonoff", na=False) & (df["room_name"] != "Licznik Główny")] if not df.empty else pd.DataFrame()
@@ -577,7 +624,7 @@ if is_tuesday and current_room != "Licznik Główny":
     if not already_added_this_week:
         with st.expander(f"🚨 WTOREK – Wymagany Odczyt dla strefy: {current_room} (Tydzień {current_iso_w})", expanded=True):
             st.warning(f"Dziś jest wtorek! Podaj aktualny stan podzielnika oraz temperaturę wewnętrzną dla strefy **{current_room}**.")
-            
+
             last_row_room = df_room_sonoff.iloc[-1] if not df_room_sonoff.empty else None
             default_units_start = float(last_row_room["units_end"]) if last_row_room is not None else ROOMS_CONFIG[current_room]["units_start"]
             default_meter = str(last_row_room["meter_number"]) if last_row_room is not None else ROOMS_CONFIG[current_room]["meter_default"]
@@ -585,19 +632,22 @@ if is_tuesday and current_room != "Licznik Główny":
             with st.form(f"auto_tuesday_form_{current_room}"):
                 st.markdown("#### 📷 Szybki odczyt OCR ze zdjęcia")
                 ocr_image_input = st.file_uploader(
-                    "Wgraj zdjęcie podzielnika (opcjonalnie)", 
-                    type=["jpg", "jpeg", "png"], 
+                    "Wgraj zdjęcie podzielnika (opcjonalnie)",
+                    type=["jpg", "jpeg", "png"],
                     key=f"ocr_file_{current_room}"
                 )
-                
+
+                # NAPRAWIONO: fallback to ostatni znany stan TEJ strefy (nie stała
+                # 1514.5 dla wszystkich stref), a wynik jest zawsze >= default_units_start,
+                # więc number_input poniżej nigdy nie crashuje na min_value.
                 suggested_end_units = default_units_start
                 if ocr_image_input is not None:
-                    success_ocr, extracted_val, ocr_msg = process_meter_ocr(ocr_image_input)
+                    success_ocr, extracted_val, ocr_msg = process_meter_ocr(ocr_image_input, default_units_start)
+                    suggested_end_units = max(extracted_val, default_units_start)
                     if success_ocr:
-                        suggested_end_units = extracted_val
                         st.success(f"✨ {ocr_msg}: **{extracted_val} U**")
                     else:
-                        st.warning(ocr_msg)
+                        st.info(ocr_msg)
 
                 c1, c2, c3 = st.columns(3)
                 with c1:
@@ -605,7 +655,16 @@ if is_tuesday and current_room != "Licznik Główny":
                 with c2:
                     units_start = st.number_input("Poprzedni stan [U]", value=default_units_start, disabled=True)
                 with c3:
-                    units_end = st.number_input("Nowy stan [U]", min_value=default_units_start, value=float(suggested_end_units), step=0.1)
+                    # NAPRAWIONO: dopuszczamy też wartość równą poprzedniemu stanowi
+                    # (min_value = default_units_start, ale suggested_end_units już
+                    # zawsze >= default_units_start, więc value nigdy nie jest
+                    # mniejsze niż min_value - to był dokładny powód crasha).
+                    units_end = st.number_input(
+                        "Nowy stan [U]",
+                        min_value=default_units_start,
+                        value=float(suggested_end_units),
+                        step=0.1
+                    )
 
                 temp_in = st.number_input("Temp. wewnątrz [°C]", min_value=10.0, max_value=30.0, value=21.0, step=0.1)
                 mode_tag = st.selectbox("Tryb pracy grzania", MODES, index=0)
@@ -614,7 +673,7 @@ if is_tuesday and current_room != "Licznik Główny":
                 if st.form_submit_button("⚡ Zapisz odczyt wtorkowy", use_container_width=True):
                     delta_u = units_end - units_start
                     next_id = int(df["id"].max() + 1) if not df.empty and pd.notna(df["id"].max()) else 1
-                    
+
                     new_row = {
                         "id": next_id,
                         "season": "2026/2027 (Sonoff - Wtorki)",
@@ -634,7 +693,7 @@ if is_tuesday and current_room != "Licznik Główny":
                         "mode_tag": mode_tag,
                         "notes": notes
                     }
-                    
+
                     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                     if save_data(df, commit_message=f"Odczyt wtorkowy {current_room} T{current_iso_w}"):
                         prev_delta = last_delta if last_delta > 0 else 1.0
@@ -657,7 +716,7 @@ st.markdown(f"""
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
         <div>
             <div class="room-header">
-                {ROOMS_CONFIG[current_room]['icon']} Strefa: <b>{current_room}</b> 
+                {ROOMS_CONFIG[current_room]['icon']} Strefa: <b>{current_room}</b>
                 <span class="meter-badge">Urządzenie: {ROOMS_CONFIG[current_room]['device_id']} | {last_meter}</span>
             </div>
             <div style="font-size: 13px; color: #8E8E93; margin-top: 2px;">ℹ️ {room_desc_subtitle}</div>
@@ -736,19 +795,33 @@ with st.sidebar:
         st.subheader("💡 Zwrot z Inwestycji (ROI)")
         HARDWARE_COST_EST = 775.79
         df_base_sum = df[df["season"].str.contains("Bazowy", na=False)]["delta_units"].sum() if not df.empty else 0.0
-        total_saved_units = max(0.0, df_base_sum - total_apartment_units) if df_base_sum > 0 else 0.0
-        total_saved_pln = total_saved_units * EST_PLN_PER_UNIT
-        payback_ratio = min(1.0, total_saved_pln / HARDWARE_COST_EST) if HARDWARE_COST_EST > 0 else 1.0
-        st.caption(f"Koszt systemu: **{HARDWARE_COST_EST:.2f} PLN**")
-        st.progress(payback_ratio, text=f"Spłacono: {total_saved_pln:.2f} PLN ({payback_ratio*100:.1f}%)")
+        if df_base_sum > 0:
+            total_saved_units = max(0.0, df_base_sum - total_apartment_units)
+            total_saved_pln = total_saved_units * EST_PLN_PER_UNIT
+            payback_ratio = min(1.0, total_saved_pln / HARDWARE_COST_EST) if HARDWARE_COST_EST > 0 else 1.0
+            st.caption(f"Koszt systemu: **{HARDWARE_COST_EST:.2f} PLN**")
+            st.progress(payback_ratio, text=f"Spłacono: {total_saved_pln:.2f} PLN ({payback_ratio*100:.1f}%)")
+        else:
+            # NAPRAWIONO: informujemy wprost, dlaczego ROI = 0%, zamiast cicho
+            # pokazywać pusty pasek postępu. Sezon "Bazowy" nie ma dziś żadnego
+            # sposobu na dodanie wpisów przez UI - trzeba je dopisać ręcznie
+            # w zakładce "Historia i Edycja Wpisów" (kolumna `season`), żeby
+            # ten moduł zaczął liczyć realne oszczędności.
+            st.caption(f"Koszt systemu: **{HARDWARE_COST_EST:.2f} PLN**")
+            st.info(
+                "Brak danych dla sezonu bazowego (2025/2026), więc ROI nie może "
+                "być jeszcze policzone. Dodaj historyczne zużycie z sezonu "
+                "bazowego w zakładce „Historia i Edycja Wpisów”, ustawiając "
+                "kolumnę `season` na `2025/2026 (Bazowy)`."
+            )
 
     elif selected_sidebar_section == "Prognoza 7D (Bytków) & Sonoff AI":
         st.subheader("🌤️ Prognoza 7D & Sonoff AI")
-        
+
         custom_key_input = st.text_input("Opcjonalny klucz OpenWeatherMap", value=st.session_state.get("custom_owm_key", ""), type="password")
         if custom_key_input:
             st.session_state["custom_owm_key"] = custom_key_input
-            
+
         forecast_list = get_weather_forecast()
         if forecast_list:
             min_temp_f = min([f['temp'] for f in forecast_list])
@@ -796,16 +869,16 @@ with st.sidebar:
             st.rerun()
 
 tab_charts, tab_season_comp, tab_analytics, tab_schedule, tab_ai_pred, tab_history = st.tabs([
-    "📈 Wykres, Skumulowany & Pogoda", 
+    "📈 Wykres, Skumulowany & Pogoda",
     "📊 Porównanie Sezonów i Koszt Narastający",
     "💸 Zyski i Straty & Heatmapa",
     "📅 Harmonogram i Sterowanie",
-    "🤖 Predykcja AI i Raport", 
+    "🤖 Predykcja AI i Raport",
     "📋 Historia i Edycja Wpisów"
 ])
 
 with tab_charts:
-    st.markdown(f"#### Korelacja Zużycia & Delta;U oraz Temperatury Zewnętrznej dla: **{current_room}**")
+    st.markdown(f"#### Korelacja Zużycia &Delta;U oraz Temperatury Zewnętrznej dla: **{current_room}**")
     if not df_filtered.empty:
         fig_dual = px_go.Figure()
         fig_dual.add_trace(px_go.Bar(x=df_filtered["period_label"], y=df_filtered["delta_units"], name="Zużycie [U]", marker_color="#007AFF"))
@@ -816,16 +889,56 @@ with tab_charts:
 with tab_season_comp:
     st.markdown("### 📊 Porównanie Sezonów i Koszt Narastający")
     if not df.empty:
-        df_cum = df[df["room_name"] != "Licznik Główny"].groupby(["season", "week_num"])["delta_units"].sum().groupby(level=0).cumsum().reset_index()
-        df_cum["cumulative_pln"] = df_cum["delta_units"] * EST_PLN_PER_UNIT
+        # NAPRAWIONO: poprzednia wersja grupowała i sumowała kumulatywnie po
+        # `week_num` (numer tygodnia ISO 1-53), który resetuje się do 1 po
+        # Nowym Roku. Dla sezonu grzewczego (wrzesień -> kwiecień) powodowało
+        # to, że tygodnie styczniowe (1, 2, 3...) były sortowane PRZED
+        # tygodniami grudniowymi (49, 50, 51), a skumulowany koszt na
+        # wykresie "cofał się" zamiast rosnąć.
+        # Teraz sortujemy chronologicznie po realnej dacie wpisu (`date_entry`)
+        # w obrębie każdego sezonu, a numer tygodnia sezonu liczymy jako
+        # kolejną, sekwencyjną pozycję (1, 2, 3...) - niezależną od numeru
+        # tygodnia ISO.
+        df_valid = df[df["room_name"] != "Licznik Główny"].copy()
+        df_valid["date_entry_dt"] = pd.to_datetime(df_valid["date_entry"], errors="coerce")
+        df_valid = df_valid.dropna(subset=["date_entry_dt"])
+
+        weekly = (
+            df_valid.groupby(["season", "week_num"])
+            .agg(delta_units=("delta_units", "sum"), date_entry_dt=("date_entry_dt", "min"))
+            .reset_index()
+        )
+        weekly = weekly.sort_values(["season", "date_entry_dt"])
+        weekly["cumulative_units"] = weekly.groupby("season")["delta_units"].cumsum()
+        weekly["cumulative_pln"] = weekly["cumulative_units"] * EST_PLN_PER_UNIT
+        # Sekwencyjny numer tygodnia W RAMACH sezonu (1, 2, 3...), odporny na
+        # reset numeracji ISO po Nowym Roku - używany tylko do osi X i do
+        # liczenia linii zaliczek SSM.
+        weekly["season_week_seq"] = weekly.groupby("season").cumcount() + 1
+        weekly["date_label"] = weekly["date_entry_dt"].dt.strftime("%d.%m.%Y")
+
         fig_cum = px_go.Figure()
-        for season_name in df_cum["season"].unique():
-            sub_df = df_cum[df_cum["season"] == season_name]
-            fig_cum.add_trace(px_go.Scatter(x=sub_df["week_num"], y=sub_df["cumulative_pln"], name=season_name, mode="lines+markers"))
-        weeks_seq = list(df_cum["week_num"].unique())
+        for season_name in weekly["season"].unique():
+            sub_df = weekly[weekly["season"] == season_name]
+            fig_cum.add_trace(px_go.Scatter(
+                x=sub_df["season_week_seq"],
+                y=sub_df["cumulative_pln"],
+                name=season_name,
+                mode="lines+markers",
+                customdata=sub_df["date_label"],
+                hovertemplate="Tydzień sezonu %{x}<br>Data: %{customdata}<br>Koszt narastająco: %{y:.2f} PLN<extra></extra>"
+            ))
+
+        max_week_seq = int(weekly["season_week_seq"].max()) if not weekly.empty else SSM_TOTAL_WEEKS
+        weeks_seq = list(range(1, max(max_week_seq, SSM_TOTAL_WEEKS) + 1))
         ssm_advances_line = [(w / SSM_TOTAL_WEEKS) * SSM_ANNUAL_CO_BUDGET for w in weeks_seq]
         fig_cum.add_trace(px_go.Scatter(x=weeks_seq, y=ssm_advances_line, name="Wpłaty Zaliczek SSM", line=dict(color="#34C759", width=3, dash="dash")))
-        fig_cum.update_layout(template="plotly_white", height=360)
+        fig_cum.update_layout(
+            template="plotly_white",
+            height=360,
+            xaxis_title="Tydzień sezonu (kolejność chronologiczna)",
+            yaxis_title="Koszt narastająco [PLN]"
+        )
         st.plotly_chart(fig_cum, use_container_width=True)
 
 with tab_analytics:
