@@ -14,7 +14,7 @@ import streamlit.components.v1 as components
 # SETUP STRONY & STYLIZACJA
 # ---------------------------------------------------------
 st.set_page_config(
-    page_page_title="Sonoff - Analiza Ciepła",
+    page_title="Sonoff - Analiza Ciepła",
     page_icon="🔥",
     layout="wide",
     initial_sidebar_state="expanded"
