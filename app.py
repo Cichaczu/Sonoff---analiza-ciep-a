@@ -11,7 +11,7 @@ import base64
 import streamlit.components.v1 as components
 
 # ---------------------------------------------------------
-# SETUP STRONY & STYLIZACJA
+# SETUP STRONY
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="Sonoff - Analiza Ciepła",
@@ -19,28 +19,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# Custom CSS dla czytelności i interfejsu
-st.markdown("""
-    <style>
-    .main {
-        background-color: #0e1117;
-    }
-    .stMetric {
-        background-color: #1e222d;
-        padding: 15px;
-        border-radius: 10px;
-        border: 1px solid #2e364f;
-    }
-    .metric-card {
-        background: linear-gradient(135deg, #1e222d 0%, #252a38 100%);
-        border-radius: 12px;
-        padding: 20px;
-        border: 1px solid #363d52;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-    }
-    </style>
-""", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # KONFIGURACJA POMIESZCZEŃ I STAŁE
@@ -59,7 +37,6 @@ MODES = ["Automatyczny (Harmonogram)", "Manualny / Eko", "Komfort 21°C+", "Wiet
 @st.cache_data(ttl=1800)
 def get_live_weather():
     try:
-        # Bytków / Katowice przybliżone współrzędne
         url = "https://api.open-meteo.com/v1/forecast?latitude=50.2972&longitude=18.9897&current=temperature_2m,relative_humidity_2m,weather_code"
         res = requests.get(url, timeout=5).json()
         curr = res.get("current", {})
@@ -87,7 +64,6 @@ def load_data():
                 return df
         return pd.read_csv(DATA_PATH)
     except Exception:
-        # Awaryjny pusty DataFrame
         return pd.DataFrame(columns=[
             "id", "season", "week_num", "period_label", "date_entry", 
             "room_name", "meter_number", "units_start", "units_end", 
@@ -104,7 +80,6 @@ def save_data(df, commit_message="Aktualizacja danych"):
             url = f"https://api.github.com/repos/{repo}/contents/{DATA_PATH}"
             headers = {"Authorization": f"token {token}"}
             
-            # Pobierz sha istniejącego pliku
             get_res = requests.get(url, headers=headers)
             sha = get_res.json().get("sha", "") if get_res.status_code == 200 else ""
             
@@ -128,7 +103,6 @@ df = load_data()
 # ---------------------------------------------------------
 # SIDEBAR
 # ---------------------------------------------------------
-st.sidebar.image("https://img.icons8.com/fluency/96/thermostat.png", width=60)
 st.sidebar.title("Sonoff Heat Hub")
 
 view_mode = st.sidebar.radio("Widok", ["📊 Panel Główny", "🌀 Antigravity Mode", "⚙️ Zarządzanie Danymi"])
@@ -152,7 +126,7 @@ if view_mode == "🌀 Antigravity Mode":
     <head>
         <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
         <style>
-            body { margin: 0; padding: 0; overflow: hidden; background-color: #0e1117; }
+            body { margin: 0; padding: 0; overflow: hidden; background-color: transparent; }
             canvas { width: 100%; height: 500px; display: block; }
         </style>
     </head>
@@ -163,15 +137,13 @@ if view_mode == "🌀 Antigravity Mode":
         const render = Render.create({
             element: document.body,
             engine: engine,
-            options: { width: 800, height: 500, wireframes: false, background: '#0e1117' }
+            options: { width: 800, height: 500, wireframes: false, background: 'transparent' }
         });
 
-        // Ściany
         const ground = Bodies.rectangle(400, 490, 800, 20, { isStatic: true, render: { fillStyle: '#2e364f' } });
         const leftWall = Bodies.rectangle(10, 250, 20, 500, { isStatic: true, render: { fillStyle: '#2e364f' } });
         const rightWall = Bodies.rectangle(790, 250, 20, 500, { isStatic: true, render: { fillStyle: '#2e364f' } });
 
-        // Kafelki stref
         const boxSalon = Bodies.rectangle(200, 100, 140, 80, { render: { fillStyle: '#ff4b4b' } });
         const boxDzieci = Bodies.rectangle(400, 100, 140, 80, { render: { fillStyle: '#00d4b1' } });
         const boxSypialnia = Bodies.rectangle(600, 100, 140, 80, { render: { fillStyle: '#ffb703' } });
@@ -199,9 +171,7 @@ if view_mode == "🌀 Antigravity Mode":
 elif view_mode == "📊 Panel Główny":
     st.title("🔥 Sonoff TRVZB – System Monitorowania Ciepła")
     
-    # ---------------------------------------------------------
-    # SPRAWDŹ CZY DZIŚ JEST WTOREK (LOGIKA I FORMULARZ ZBIORCZY)
-    # ---------------------------------------------------------
+    # SPRAWDŹ CZY DZIŚ JEST WTOREK
     today = date.today()
     is_tuesday = (today.weekday() == 1)
 
@@ -213,7 +183,6 @@ elif view_mode == "📊 Panel Główny":
     if is_tuesday:
         current_year, current_iso_w, _ = today.isocalendar()
         
-        # Sprawdzamy, dla których pokoi brakuje jeszcze wpisu w tym tygodniu
         df_sonoff_this_week = df[(df["week_num"] == current_iso_w) & (df["season"] == "2026/2027 (Sonoff - Wtorki)")] if not df.empty else pd.DataFrame()
         logged_rooms = df_sonoff_this_week["room_name"].unique() if not df_sonoff_this_week.empty else []
         missing_rooms = [r for r in ["Salon", "Dzieciaki", "Sypialnia"] if r not in logged_rooms]
@@ -286,15 +255,12 @@ elif view_mode == "📊 Panel Główny":
                             st.success("Zapisano odczyty dla wszystkich pomieszczeń!")
                             st.rerun()
 
-    # ---------------------------------------------------------
-    # OPIS I KARTY METRYK STREFY
-    # ---------------------------------------------------------
+    # METRYKI
     room_share_pct = ROOMS_CONFIG.get(current_room, {}).get("share", 1.0) * 100
     room_desc_subtitle = "Suma wszystkich pokoi w mieszkaniu" if current_room == "Licznik Główny" else f"Pojedyncza strefa grzewcza ({room_share_pct:.1f}% udziału w mieszkaniu)"
 
     st.caption(room_desc_subtitle)
 
-    # Filtrowanie danych pod wybraną strefę
     if current_room == "Licznik Główny":
         df_filtered = df.copy()
     else:
@@ -310,9 +276,7 @@ elif view_mode == "📊 Panel Główny":
     m3.metric("Średnia Temp. Wewnętrzna", f"{avg_temp_in:.1f} °C")
     m4.metric("Aktualna Temp. Zewnętrzna", f"{live_outdoor_temp:.1f} °C")
 
-    # ---------------------------------------------------------
     # WYKRES ZUŻYCIA
-    # ---------------------------------------------------------
     st.divider()
     st.subheader("📈 Zużycie Ciepła w Czasie")
 
@@ -326,7 +290,6 @@ elif view_mode == "📊 Panel Główny":
             labels={"delta_units": "Zużycie [U]", "period_label": "Okres", "room_name": "Strefa"},
             barmode="group"
         )
-        fig.update_layout(template="plotly_dark", height=400)
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.info("Brak danych do wyświetlenia wykresu. Dodaj pierwsze odczyty w zakładce Zarządzanie Danymi.")
