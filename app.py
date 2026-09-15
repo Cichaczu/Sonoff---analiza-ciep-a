@@ -585,70 +585,81 @@ else:
         if not df_room.empty:
             already_added_this_week = ((df_room["week_num"] == current_iso_w) & (df_room["season"] == "2026/2027 (Sonoff - Wtorki)")).any()
 
-        if not already_added_this_week:
-            with st.expander(f"🚨 WTOREK – Wymagany Odczyt dla strefy: {current_room} (Tydzień {current_iso_w})", expanded=True):
-                st.warning(f"Dziś jest wtorek! Podaj aktualny stan podzielnika oraz temperaturę wewnętrzną dla strefy **{current_room}**.")
-                with st.form("auto_tuesday_modal_form"):
-                    m_input = st.text_input("Numer Podzielnika", value=last_meter)
-                    u_s = st.number_input("Stały Stan Początkowy Sezonu", min_value=0.0, value=val_start, disabled=True)
-                    u_e = st.number_input("Wartość Końcowa (Z dzisiejszego wtorku)", min_value=0.0, value=max(val_end, val_start), step=0.1)
-                    t_in_modal = st.number_input("Temperatura w pomieszczeniu [°C]", min_value=10.0, max_value=30.0, value=21.0, step=0.1)
-                    m_tag = st.selectbox("Tryb pracy grzania", MODES, index=0)
-                    
-                    col_g1, col_g2 = st.columns(2)
-                    with col_g1:
-                        gj_s_m = st.number_input("Licznik Główny Początek [GJ]", min_value=0.0, value=0.0, step=0.01)
-                    with col_g2:
-                        gj_e_m = st.number_input("Licznik Główny Koniec [GJ]", min_value=0.0, value=0.0, step=0.01)
-                    
-                    modal_notes = st.text_input("Uwagi / Nastawa", value="Wtorkowa synchronizacja automatyczna")
+if is_tuesday:
+        current_year, current_iso_w, _ = today.isocalendar()
+        
+        # Sprawdzamy, dla których pokoi brakuje jeszcze wpisu w tym tygodniu
+        df_sonoff_this_week = df[(df["week_num"] == current_iso_w) & (df["season"] == "2026/2027 (Sonoff - Wtorki)")]
+        logged_rooms = df_sonoff_this_week["room_name"].unique() if not df_sonoff_this_week.empty else []
+        missing_rooms = [r for r in ["Salon", "Dzieciaki", "Sypialnia"] if r not in logged_rooms]
 
-                    if st.form_submit_button("⚡ Zapisz i zsynchronizuj aplikację", use_container_width=True):
-                        prev_val_end = val_end if not df_room_sonoff.empty else val_start
-                        delta_u_m = u_e - prev_val_end
-                        if delta_u_m < 0:
-                            delta_u_m = 0.0
-                            modal_notes = f"{modal_notes} [Auto-korekta: ujemna delta]"
-                        delta_g_m = gj_e_m - gj_s_m if gj_e_m > gj_s_m else 0.0
+        if missing_rooms:
+            with st.expander(f"🚨 WTOREK – Wymagane Odczyty Wtorkowe (Tydzień {current_iso_w})", expanded=True):
+                st.warning(f"Dziś jest wtorek! Wprowadź dzisiejsze odczyty z podzielników dla brakujących pomieszczeń: **{', '.join(missing_rooms)}**.")
+                
+                with st.form("auto_tuesday_all_rooms_form"):
+                    inputs_data = {}
+                    
+                    for r_name in missing_rooms:
+                        st.markdown(f"### {ROOMS_CONFIG[r_name]['icon']} {r_name}")
+                        r_df = df[(df["room_name"] == r_name) & (df["season"].str.contains("Sonoff", na=False))]
+                        
+                        r_last_val = float(r_df.iloc[-1]["units_end"]) if not r_df.empty else ROOMS_CONFIG[r_name]["units_start"]
+                        r_meter = str(r_df.iloc[-1]["meter_number"]) if not r_df.empty else ROOMS_CONFIG[r_name]["meter_default"]
+                        
+                        c1, c2, c3 = st.columns(3)
+                        with c1:
+                            m_num = st.text_input(f"Nr podzielnika ({r_name})", value=r_meter, key=f"m_{r_name}")
+                        with c2:
+                            u_start = st.number_input(f"Poprzedni stan ({r_name})", value=r_last_val, disabled=True, key=f"us_{r_name}")
+                        with c3:
+                            u_end = st.number_input(f"Nowy stan [U] ({r_name})", min_value=r_last_val, value=r_last_val, step=0.1, key=f"ue_{r_name}")
+                        
+                        t_in = st.number_input(f"Temp. wewnątrz [°C] ({r_name})", min_value=10.0, max_value=30.0, value=21.0, step=0.1, key=f"t_{r_name}")
+                        
+                        inputs_data[r_name] = {
+                            "meter": m_num,
+                            "u_start": r_last_val,
+                            "u_end": u_end,
+                            "temp_in": t_in
+                        }
+                        st.divider()
 
-                        if u_e < prev_val_end:
-                            st.error("Wartość końcowa nie może być mniejsza od poprzedniego stanu licznika!")
-                        else:
-                            next_id = int(df["id"].max() + 1) if not df.empty and pd.notna(df["id"].max()) else 1
-                            new_row_modal = pd.DataFrame([{
+                    m_tag = st.selectbox("Wspólny tryb pracy grzania", MODES, index=0)
+                    modal_notes = st.text_input("Uwagi / Nastawa", value="Zbiorczy odczyt wtorkowy")
+
+                    if st.form_submit_button("⚡ Zapisz odczyty dla wszystkich stref", use_container_width=True):
+                        new_rows = []
+                        next_id = int(df["id"].max() + 1) if not df.empty and pd.notna(df["id"].max()) else 1
+                        
+                        for r_name, data in inputs_data.items():
+                            delta_u = data["u_end"] - data["u_start"]
+                            
+                            new_rows.append({
                                 "id": next_id,
                                 "season": "2026/2027 (Sonoff - Wtorki)",
                                 "week_num": current_iso_w,
                                 "period_label": f"Tydzień {current_iso_w:02d} (Wtorek)",
                                 "date_entry": str(today),
-                                "room_name": current_room,
-                                "meter_number": m_input,
-                                "units_start": prev_val_end,
-                                "units_end": u_e,
-                                "delta_units": delta_u_m,
-                                "gj_start": gj_s_m,
-                                "gj_end": gj_e_m,
-                                "delta_gj": delta_g_m,
+                                "room_name": r_name,
+                                "meter_number": data["meter"],
+                                "units_start": data["u_start"],
+                                "units_end": data["u_end"],
+                                "delta_units": delta_u,
+                                "gj_start": 0.0,
+                                "gj_end": 0.0,
+                                "delta_gj": 0.0,
                                 "temp_zewnetrzna": live_outdoor_temp,
-                                "temp_wewnetrzna": t_in_modal,
+                                "temp_wewnetrzna": data["temp_in"],
                                 "mode_tag": m_tag,
                                 "notes": modal_notes
-                            }])
+                            })
+                            next_id += 1
 
-                            df = pd.concat([df, new_row_modal], ignore_index=True)
-                            if save_data(df, commit_message=f"Automatyczny odczyt wtorkowy: {current_room} T{current_iso_w}"):
-                                prev_delta = last_delta if last_delta > 0 else 1.0
-                                diff_vs_prev = ((delta_u_m - prev_delta) / prev_delta * 100) if prev_delta > 0 else 0.0
-                                new_total_room = total_delta_room + delta_u_m
-                                st.session_state["fancy_alert"] = {
-                                    "timestamp": time.time(),
-                                    "room": current_room,
-                                    "delta": delta_u_m,
-                                    "diff_vs_prev": diff_vs_prev,
-                                    "total_room_units": new_total_room
-                                }
-                                st.success("Zapisano pomyślnie! Synchronizuję aplikację...")
-                                st.rerun()
+                        df = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
+                        if save_data(df, commit_message=f"Zbiorczy odczyt wtorkowy T{current_iso_w}"):
+                            st.success("Zapisano odczyty dla wszystkich pomieszczeń!")
+                            st.rerun()
 
     room_desc_subtitle = "Suma wszystkich pokoi w mieszkaniu" if current_room == "Licznik Główny" else f"Pojedyncza strefa grzewcza ({room_share_pct:.1f}% udziału w mieszkaniu)"
 
